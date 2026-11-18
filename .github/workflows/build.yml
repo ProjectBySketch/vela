@@ -45,7 +45,7 @@ jobs:
 
   macos:
     name: macos package (.dmg)
-    runs-on: macos-14
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Build the universal dmg
@@ -65,7 +65,7 @@ jobs:
 
   ios:
     name: ios app (.ipa, unsigned)
-    runs-on: macos-14
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - run: make

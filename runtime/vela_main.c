@@ -1,5 +1,7 @@
 /* Desktop entry point: run the Vela program's top-level code. */
 
+#include <stdio.h>
+
 #include "vela_runtime.h"
 
 vela_value vela_main(void);

@@ -7,6 +7,10 @@
  * runtime/vela_runtime.c.
  */
 
+#if !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L /* readlink, under a strict -std=c11 */
+#endif
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -905,6 +909,8 @@ static void gen_assign(Parser *p) {
     perr(p, curp(p), "cannot assign to this expression");
   }
 }
+
+static void gen_expr(Parser *p) { gen_assign(p); }
 
 static void gen_unary(Parser *p) {
   if (check(p, TK_NOT)) {

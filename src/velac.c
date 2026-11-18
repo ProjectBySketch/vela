@@ -1153,6 +1153,7 @@ static void gen_for(Parser *p) {
   nl(p);
   emitf(p, "vela_value vela_it_%d = ", id);
   gen_expr(p);
+  expect_tok(p, TK_LBRACE, "'{'");
   emit(p, ";");
   nl(p);
   emitf(p, "vela_list *vela_lst_%d = vela_as_list(vela_it_%d, \"for loop\");", id, id);

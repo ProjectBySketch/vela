@@ -1,0 +1,11 @@
+let a = "Vela"
+let b = "lang"
+println(a + " " + b)
+println(len(a))
+println("num: " + 42)
+println(type(a))
+println(type(1))
+
+let s = "hi"
+println(s == "hi")
+println(s != "ho")

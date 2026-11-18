@@ -1,0 +1,18 @@
+mut xs = [1, 2, 3]
+push(xs, 4)
+
+println(xs)
+println(len(xs))
+println(at(xs, 0))
+println(at(xs, -1))
+set(xs, 0, 10)
+
+println(xs)
+mut total = 0
+for x in xs {
+  total += x
+}
+println(total)
+
+println(range(3))
+println([[1, 2], ["a"]])

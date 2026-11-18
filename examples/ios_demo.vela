@@ -1,0 +1,23 @@
+# The program the iOS app runs.
+
+println("Vela on iOS")
+println("compiled to C, then built with clang for arm64")
+println("")
+
+fn fib(n) {
+  if n < 2 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+mut i = 0
+while i < 12 {
+  print(fib(i))
+  print(" ")
+  i += 1
+}
+println("")
+
+println("range(5) = " + str(range(5)))
+println("type(1) = " + type(1))

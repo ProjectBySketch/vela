@@ -1,0 +1,78 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: build and test (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build velac
+        run: make
+      - name: Run the test suite
+        run: make test
+      - name: Compile every example
+        run: |
+          export VELA_RUNTIME="$PWD/runtime"
+          mkdir -p build/examples
+          for f in examples/*.vela; do
+            ./build/velac "$f" -o "build/examples/$(basename "$f" .vela)"
+          done
+
+  debian:
+    name: debian package (.deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make
+      - name: Build the .deb
+        run: bash packaging/debian/build.sh
+      - name: Show package info
+        run: dpkg-deb --info dist/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vela-debian
+          path: dist/*.deb
+          if-no-files-found: error
+
+  macos:
+    name: macos package (.dmg)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the universal dmg
+        run: bash packaging/macos/build.sh
+      - name: Check the bundled compiler
+        run: |
+          hdiutil attach dist/*.dmg -nobrowse -quiet -mountpoint /tmp/vela
+          ls -R /tmp/vela | head -40
+          VELAC="$(ls -d /tmp/vela/Vela-*/bin/velac | head -1)"
+          "$VELAC" --version
+          hdiutil detach /tmp/vela -quiet
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vela-macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  ios:
+    name: ios app (.ipa, unsigned)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: make
+      - name: Build the unsigned .ipa
+        run: bash packaging/ios/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vela-ios
+          path: dist/*.ipa
+          if-no-files-found: error

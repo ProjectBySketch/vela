@@ -1,0 +1,27 @@
+fn greet(name) {
+  if name == nil {
+    return "hello, stranger"
+  }
+  return "hello, " + name
+}
+
+println(greet(nil))
+println(greet("Vela"))
+
+mut maybe = nil
+if maybe != nil && len(maybe) > 0 {
+  println("has items")
+} else {
+  println("nothing")
+}
+
+let items = [1, 2]
+if items != nil && len(items) > 0 {
+  println("has items")
+}
+
+println("5" + 5)
+println(num("12") + 1)
+println(abs(-4) + floor(2.7) + ceil(2.1))
+println(sqrt(9))
+assert(len("abc") == 3)

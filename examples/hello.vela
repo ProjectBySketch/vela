@@ -1,0 +1,4 @@
+# Vela says hello
+
+let name = "world"
+println("hello, " + name)

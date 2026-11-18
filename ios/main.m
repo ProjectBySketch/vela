@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import <dispatch/dispatch.h>
+
 #include "vela_runtime.h"
 
 vela_value vela_main(void);

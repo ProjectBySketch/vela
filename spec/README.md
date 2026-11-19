@@ -175,6 +175,10 @@ Read in order for a full picture; each stands alone for reference.
 | 33 | [33-diagnostics.md](33-diagnostics.md) | Diagnostic anatomy, code families, severity policy, baselines | spec |
 | 34 | [34-style.md](34-style.md) | Naming, formatting, lints, idioms, API and review checklists | spec |
 | 35 | [35-limitations.md](35-limitations.md) | The implementation gap, unwritten areas, non-goals, risks, open questions | living |
+| 36 | [36-ai.md](36-ai.md) | Tensors, autodiff, training, inference, tokenisers, serving, evals | spec |
+| 37 | [37-kernel.md](37-kernel.md) | Processes, virtual memory, VFS, drivers, IPC, syscalls, POSIX layer | spec |
+| 38 | [38-serialization.md](38-serialization.md) | Nine formats, derives, schema evolution, validation, dataframes | spec |
+| 39 | [39-cloud.md](39-cloud.md) | Deploy adapters, config, observability, scaling, rollback | spec |
 
 Illustrative programs that exercise the spec live in
 [examples/](examples/README.md). They are **not** built by CI, because they use
@@ -186,6 +190,8 @@ features `velac` does not implement yet:
 | [examples/app/notes.vela](examples/app/notes.vela) | `app` | views, styles, state, persistence |
 | [examples/web/site.vela](examples/web/site.vela) | `web` | pages, routes, islands, a server |
 | [examples/kernel.vela](examples/kernel.vela) | `sys` | boot, MMIO, interrupts, heap |
+| [examples/os/fs.vela](examples/os/fs.vela) | `sys` | a filesystem trait, a block driver, a syscall |
+| [examples/ai/train.vela](examples/ai/train.vela) | `core` | tensors, autodiff, training, inference, serving |
 
 ---
 
@@ -233,13 +239,13 @@ claimed:
 
 | Dimension | 0.1 (implemented) | 1.0 (this spec) |
 | --- | --- | --- |
-| Documents | 0 | 35 |
+| Documents | 0 | 39 |
 | Keywords | 14 | 60 reserved + 18 contextual |
 | Value types | 6 | 24 primitive and composite |
 | Operators | 17 | 48 |
 | Statement forms | 8 | 19 |
 | Declaration forms | 3 | 18 |
-| Stdlib modules | 0 | 58 |
+| Stdlib modules | 0 | 70+ |
 | Standard library items | 15 builtins | 1,100+ |
 | Style properties (replacing CSS) | 0 | 214 |
 | Attributes | 0 | 59 |

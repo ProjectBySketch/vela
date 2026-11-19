@@ -32,6 +32,9 @@ profiles that do.
 | `game`, `physics`, `save` | [30-games.md](30-games.md) | ECS, simulation, netcode |
 | `plugins` | [31-plugins.md](31-plugins.md) | host side of the plugin ABI |
 | `embedded`, `hal` | [32-embedded.md](32-embedded.md) | microcontrollers |
+| `tensor`, `nn`, `train`, `infer`, `tokenize`, `embed`, `serve` | [36-ai.md](36-ai.md) | machine learning |
+| `cbor`, `msgpack`, `proto`, `toml`, `yaml`, `csv`, `parquet`, `data` | [38-serialization.md](38-serialization.md) | formats and dataframes |
+| `observability`, `deploy`, `config` | [39-cloud.md](39-cloud.md) | telemetry, deployment, typed configuration |
 
 `db` appears in both lists: its query surface is part of this document, its
 schema and migration surface is doc 20.

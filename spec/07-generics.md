@@ -182,15 +182,62 @@ that never writes `box` has no virtual calls.
 
 ## 7. Variance
 
-Only `List<T>` is variant, and only covariantly for reading (doc 02 §11). Every
-other generic type is **invariant**, which means `Tree<Cat>` is not a
-`Tree<Animal>`, and therefore cannot be inserted into. This is the boring correct
-answer: variance is where type systems grow footguns, and Vela gets the useful
-case (`List`) and nothing else.
+Variance is a property of a **type parameter's position**, and Vela derives it
+mechanically. A programmer never writes `in`, `out` or `+`/`-`; the compiler
+checks the rules below and rejects a use that would be unsound.
+
+| Generic type | Variance | Consequence |
+| --- | --- | --- |
+| `List<T>` | covariant | `List<Cat>` is accepted where `List<Animal>` is expected |
+| `Option<T>`, `Result<T, E>`, `Task<T>` | covariant | same |
+| `Func() -> T` (return position) | covariant | same |
+| `Func(T) -> Void` (parameter position) | contravariant | `Func(Animal)` is accepted where `Func(Cat)` is expected |
+| `Channel<T>` (send **and** receive) | invariant | `Channel<Cat>` is not a `Channel<Animal>` |
+| `Map<K, V>` | invariant in `K` (hashed), covariant in `V` for reads only | a `Map<Str, Cat>` read as `Map<Str, Animal>` may not be inserted into |
+| `Set<T>` | invariant | inserting needs exactly `T` |
+| `Ptr<T>`, `Volatile<T>` | invariant | raw memory is not variant |
+| a user `struct`/`enum`/`trait` parameter | inferred from where it is used | see below |
+
+### 7.1 Rule for user types
+
+For a declaration `struct Box<T> { value: T }`, `T` is **covariant** if it appears
+only in field types read by the API, **contravariant** if it appears only as a
+parameter of a stored `Func`, and **invariant** if it appears in both or behind a
+`mut` field. The compiler computes this from the declaration and reports it in
+`vela doc`, so a library author can see it.
+
+A generic type whose parameter is invariant is the default and always safe. A
+covariant type is the exception, and it costs one thing: the first mutation
+through a widened view copies (the same mechanism as doc 09 §3's copy-on-write).
+That is why `List<Cat>` widening is sound without a borrow checker: the widening
+is a *read* view, and a write through it becomes a copy of the right type.
+
+### 7.2 What is rejected
+
+```vela
+fn pushAnimal(xs: List<Animal>, a: Animal) {
+  xs.push(a)                       // ok: the list is Animal's
+}
+
+fn bad(xs: List<Cat>) {
+  let wider: List<Animal> = xs     // ok, covariant
+  wider.push(Dog(..))              // E-GEN-070: cannot write through a widened view
+}
+
+fn alsoBad(f: Func(Cat) -> Void) {
+  let g: Func(Animal) -> Void = f  // ok, contravariant
+  g(Dog(..))                       // fine, g accepts any Animal, f is never called with it
+}
+```
+
+`E-GEN-070` is "mutation through a covariant view": it is a compile error when the
+compiler can see it, and a runtime copy when the value arrives through an
+interface that erased the distinction (`box`).
 
 ---
 
 ## 8. Coherence
+
 
 Two rules keep generics sound in the presence of separate compilation:
 
@@ -229,15 +276,57 @@ Rules:
 
 ## 10. `const` generics
 
-**Planned.** The syntax is reserved:
+A generic parameter may be a **value** instead of a type. It is evaluated at
+compile time and participates in the type.
 
 ```vela
-struct Matrix<const R: Int, const C: Int> { data: [Float; R * C] }
+struct Matrix<const R: Int, const C: Int> {
+  data: [Float; R * C]
+}
+
+struct Buffer<const N: IntSize> {
+  bytes: [UInt8; N]
+}
+
+const MAT3 = Matrix<3, 3> { data: [0.0; 9] }
+
+impl<const R: Int, const C: Int> Matrix<R, C> {
+  fn rows(self) -> Int { R }
+  fn at(self, r: Int, c: Int) -> Float { self.data[r * C + c] }
+}
+
+impl<const N: IntSize> Buffer<N> {
+  fn len(self) -> IntSize { N }
+}
 ```
 
-This is the last piece needed for fixed-size buffers in `sys` without macros.
-Until it lands, the workaround is a `sys`-profile `Ptr<Float>` plus a runtime
-length, which is what the spec's kernel examples do.
+Rules:
+
+* A const parameter's type is `Int`, `UInt`, `IntSize`, `Bool`, `Char` or an enum
+  without payloads. A `Float` or `Str` parameter is `E-GEN-080`, because equality
+  on those is not a compile-time identity.
+* The value must be a `comptime`-evaluable expression. `Matrix<N, N>` with an
+  unknown `N` is `E-GEN-081`.
+* Two instantiations with different values are **different types**:
+  `Matrix<2, 2>` and `Matrix<3, 3>` do not unify, and each is monomorphised.
+* Arithmetic in a const argument (`R * C`, `N + 1`, `N / 2`) is supported for
+  integer parameters, and it is evaluated with the same rules as ordinary integer
+  arithmetic (doc 03 §5.2), which means overflow is a compile error in `comptime`.
+* A const parameter may appear in an array length, in a `Field` bound, in another
+  const argument, and in a `where` clause:
+  `where N > 0`, `where R == C` (a square matrix).
+* `#[genericSize]` counts const instantiations the same way it counts type ones.
+* Pattern matching on a const parameter is a `match` in `comptime` code; at run
+  time the value is a literal.
+
+This is what removes the last macro from the systems profile: a fixed-size buffer,
+a page table of `512` entries, a ring of `256` slots and a register block of a
+known size are all `struct X<const N: Int>`, with the size checked at compile time
+and no runtime length field.
+
+A `const` generic is also what makes a shader's workgroup size and an ML kernel's
+tile size compile-time constants rather than uniforms (`E-AI-080` if a tile size
+is not `comptime`).
 
 ---
 
@@ -266,6 +355,10 @@ length, which is what the spec's kernel examples do.
 | `E-GEN-040` | too many instantiations |
 | `E-GEN-050` | generic parameter shadowing another |
 | `E-GEN-060` | `box` used in a `sys` profile without an allocator |
+| `E-GEN-070` | mutation through a covariant view |
+| `E-GEN-080` | const parameter of an unsupported type |
+| `E-GEN-081` | const argument not evaluable at compile time |
+| `E-GEN-090` | `where` clause impossible to satisfy for the given const arguments |
 
 ---
 

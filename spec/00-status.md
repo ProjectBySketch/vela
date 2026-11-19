@@ -536,6 +536,65 @@ This is the replacement for SwiftUI, UIKit, HTML and CSS.
 | API and review checklists | `spec` |
 
 
+### 2.32 AI and machine learning — doc 36
+
+| Feature | Status |
+| --- | --- |
+| Tensors with compile-time shapes and dtypes | `spec` |
+| CPU and GPU devices, Metal/WebGPU/Vulkan backends | `spec` |
+| Reverse-mode autodiff over a Vela function | `spec` |
+| `#[derive(Module)]`, `Parameter`, train/eval mode | `spec` |
+| Training loop, optimisers, schedules, mixed precision, checkpoints | `spec` |
+| Datasets, loaders, prefetch, validation strategy | `spec` |
+| Tokenisers (BPE, WordPiece, Unigram) with model hash checking | `spec` |
+| Inference from safetensors/GGUF/ONNX, KV cache, streaming | `spec` |
+| Quantisation (int8, int4 groupwise) | `spec` |
+| Embeddings and vector retrieval | `spec` |
+| Serving with batching, limits, cancellation | `spec` |
+| Evaluation suites as CI gates | `spec` |
+| GPU kernels authored in Vela | `spec` (hardware validation `planned`) |
+
+### 2.33 Kernel and OS construction — doc 37
+
+| Feature | Status |
+| --- | --- |
+| Processes, threads, scheduler policies, context switch | `spec` |
+| Address spaces, demand paging, CoW fork, shared memory | `spec` |
+| Syscall table with generated userland ABI and `UserPtr` validation | `spec` |
+| VFS and the `FileSystem` trait | `spec` |
+| In-tree filesystems (`ramfs`, `tmpfs`, `fat32`, `ext2`) | `planned` |
+| Driver framework: PCI, USB, virtio, platform, IRQ split | `spec` |
+| IPC: typed ports, shared memory, pipes, signals | `spec` |
+| Capability-based process security | `spec` |
+| `init`, services, update slots | `spec` |
+| POSIX compatibility layer and Vela libc | `spec` |
+| In-kernel network stack | `spec` |
+| Crash dumps and symbolisation | `spec` |
+
+### 2.34 Serialization and data — doc 38
+
+| Feature | Status |
+| --- | --- |
+| `#[derive(Serialize, Deserialize)]` across nine formats | `spec` |
+| JSON, JSON Lines, CBOR, MessagePack, Protobuf, TOML, YAML, CSV, Parquet | `spec` |
+| Schema evolution rules per format and stored-data migrations | `spec` |
+| `Validate` derive and the decode-then-validate rule | `spec` |
+| Limits on depth, size and polymorphic fields | `spec` |
+| Typed dataframes with joins and aggregations | `spec` (window functions `planned`) |
+| Golden fixtures for wire formats | `spec` |
+
+### 2.35 Deployment and operations — doc 39
+
+| Feature | Status |
+| --- | --- |
+| Deployable shapes: binary, static, OCI, static site, Wasm | `spec` |
+| Typed configuration with `#[derive(Config)]` and precedence | `spec` |
+| Deploy adapters, canary, automatic rollback | `spec` |
+| OpenTelemetry traces, metrics and logs over OTLP | `spec` |
+| Health/readiness and graceful shutdown | `spec` |
+| Local development parity (`vela dev`) | `spec` |
+| Multi-region guidance | `spec` |
+
 ---
 
 ## 3. The gap, in one paragraph
@@ -545,10 +604,10 @@ the subset in §1: 14 keywords, 6 value types, 15 builtins, no types, no
 closures, no structs, no modules, no borrow or ownership checking, no memory
 management, no UI and no web. This specification describes a language roughly
 one hundred times that size in surface area: 60 reserved keywords, 24 types, 48
-operators, 58 standard library modules, 18 declaration forms, 214 style
-properties and four profiles. And doc 35 states, in one place, everything this
-specification still does not answer — 23 unwritten areas, 18 deliberate
-non-goals, and 10 open questions. The distance between the two is the roadmap, and
+operators, 70+ standard library modules, 18 declaration forms, 214 style
+properties and four profiles. Doc 35 records the 23 areas that were gaps in the
+first draft and where each was closed, plus the twelve that remain; the distance
+between the compiler and this specification is the roadmap, and
 it is large on purpose — a language that can build an operating system and a
 styled website cannot be a weekend project, and pretending otherwise would be
 the only dishonest thing in this repository.

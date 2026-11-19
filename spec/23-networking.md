@@ -263,7 +263,22 @@ socket on a loopback port when the fake is not enough.
 
 ---
 
-## 11. Diagnostics
+## 12. Wire formats and observability
+
+* gRPC messages are `#[derive(Proto)]` structs (doc 38 §1); a `.proto` file is
+  generated from the type by `vela build --emit-proto`, and a `.proto` file that
+  arrives first is turned into a Vela type by `vela bindgen --proto`. Field numbers
+  live in the type, so a renumbering is a reviewable diff.
+* HTTP request/response bodies use the codecs in doc 38: JSON by default,
+  MessagePack or CBOR when the header asks, and a `Accept:` negotiation helper
+  that picks from a declared preference list.
+* Observability is OpenTelemetry over OTLP; the wire format, sampling and exporter
+  configuration are specified in [39-cloud.md](39-cloud.md) §5, and an instrumented
+  `http` client propagates `traceparent` without the program doing anything.
+
+---
+
+## 13. Diagnostics
 
 | Code | Meaning |
 | --- | --- |

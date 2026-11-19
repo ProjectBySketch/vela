@@ -159,7 +159,7 @@ unsafe {
 
 ## 3. Swift and Objective-C
 
-**Status:** `planned`.
+**Status:** `spec`.
 
 ```vela
 extern "swift" module Foundation {
@@ -187,6 +187,73 @@ Design intent, stated so it can be reviewed:
 
 This is the bridge that makes doc 13's `app` profile a real iOS app rather than a
 look-alike: the generated UI uses UIKit/SwiftUI through exactly this mechanism.
+
+### 3.1 The Objective-C runtime, precisely
+
+A Vela type marked `#[objc]` is emitted as a real Objective-C class, not a proxy:
+
+| Vela | Objective-C |
+| --- | --- |
+| `#[objc(name: "VELAWidget")] shared struct W` | `@interface VELAWidget : NSObject` |
+| `impl W { fn title(self) -> Str }` | `- (NSString *)title` |
+| `impl W { fn setTitle(mut self, s: Str) }` | `- (void)setTitle:(NSString *)s` |
+| `static fn make() -> W` | `+ (VELAWidget *)make` |
+| `impl SomeObjCProtocol for W { }` | `<SomeObjCProtocol>` conformance, methods generated from the protocol |
+| an enum with `#[repr(i32)]` | `NS_ENUM` |
+| a `struct` with `#[repr(C)]` | a C struct usable from Objective-C |
+
+Rules:
+
+* Method names are camel-cased at the boundary (`setTitle` → `setTitle:`), and a
+  Vela method whose Vela name contains `:` maps to a multi-part selector
+  (`insert(at:)`), so a protocol requirement is satisfiable without a shim.
+* Retain/release is ARC on both sides: a `shared struct` passed to Objective-C is
+  retained for the duration of the call and released after; a `weak` field is a
+  weak reference. A cycle between a Vela object and an Objective-C object is
+  collected by neither, which is why `#[objc]` types may declare `weak` fields and
+  why `vela check --lint` warns on a strong back-reference (`W-FFI-020`).
+* Delegates: `delegate.assign(obj)` chooses a weak reference, because that is what
+  `delegate` means in Cocoa and getting it wrong is the classic leak.
+* KVC/KVO are **not** supported: observing a Vela object from Objective-C is done
+  through a protocol callback, not string keys.
+* Swizzling, method resolution at run time and `forwardInvocation:` are not
+  exposed. A program that needs them drops into `extern "c"` and `unsafe`.
+
+---
+
+## 3.2 C++
+
+**Status:** `spec` for the `extern "cxx"` surface; template interop is `planned`.
+
+Calling C++ needs a stable ABI, and C++ has none, so the design is explicit:
+
+```vela
+extern "cxx" class Widget {
+  fn new(name: Str) -> Widget
+  fn setSize(mut self, w: Float, h: Float)
+  fn render(self) -> Void
+}
+```
+
+* `extern "cxx" class` declares an opaque C++ class; Vela code creates it with the
+  declared factory, calls methods through a generated C shim, and drops it with
+  the class's destructor. The shim is generated, `extern "C"`, and compiled by the
+  project's C++ compiler.
+* A Vela `struct` with `#[repr(C)]` can be passed by value or pointer to C++.
+* A C++ callback into Vela is a `Func(...) -> T` parameter with `#[cdecl]`.
+* Templates are not instantiated from Vela: a C++ template that matters is wrapped
+  in a concrete class in C++ and declared here. That is `planned` to change with a
+  generator that reads a header and emits the instantiations the program uses.
+* Exceptions never cross the boundary: a C++ function declared here must be
+  `noexcept` (or wrapped), because a C++ exception unwinding into a Vela frame is
+  undefined. `#[cxx(throws: true)]` wraps it in a `try/catch` in the shim and
+  returns a `Result` instead.
+* The standard library is not exposed; a C++ library is a dependency, and the
+  project's `vela.pkg` records the extra `-lstdc++` link.
+
+A C++ codebase is therefore usable in two ways: through a hand-written C API (doc
+17 §2, always available), or through `extern "cxx"` with the generated shim (less
+work, one more build step).
 
 ---
 

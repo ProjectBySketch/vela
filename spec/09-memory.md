@@ -286,7 +286,7 @@ convenient exactly where convenience would mean a hidden allocation.
 | Borrow checker with lifetimes | annotation cost; `unique` + `borrow` + CoW covers the real cases |
 | Manual `free` in safe code | that is what `unsafe` and `unique` are for |
 | `memcpy`-style shallow copies of Shared values | aliasing without a count is the bug RC exists to prevent |
-| Slice types with lifetimes | `planned`; would enable zero-copy parsing without an arena |
+| Slice types with lifetimes | `spec`, §13 — borrowed `Slice<T>`, call-scoped |
 | Escape analysis | `planned`; would let more values live on the stack automatically |
 | Generational arena in the stdlib | `planned`; the pool allocator covers it today |
 
@@ -307,6 +307,76 @@ convenient exactly where convenience would mean a hidden allocation.
 | `E-MEM-050` | `drop` on a type that also declares `Clone` without a clone |
 | `W-MEM-010` | `unsafe` block without a reason string |
 | `W-MEM-020` | Shared value in a `sys` structure that has a non-failing alternative |
+
+---
+
+## 13. Slices — zero-copy views
+
+A slice is a borrowed view of a contiguous region: a pointer and a length, with no
+ownership and no reference count.
+
+```vela
+fn parseHeader(data: Slice<UInt8>) -> Result<Header, ParseError> {
+  if data.len < 16 { fail ParseError.tooShort }
+  let magic = data[0..<4]
+  ...
+}
+
+let bytes = try fs.read("packet.bin")?
+let header = try parseHeader(bytes)?        // no copy: bytes is viewed
+```
+
+| Rule | Detail |
+| --- | --- |
+| Creation | `xs.view(a..<b)` on a `List`, `Str` or `Bytes`; implicit at a call boundary |
+| Type | `Slice<T>` where `T` is the element type; `Slice<UInt8>` for bytes |
+| Operations | `.len`, `[i]`, `[a..<b]` (another slice), iteration, `start`, `end` |
+| Mutation | none. There is no `SliceMut`; a function that writes takes a `mut` value or an `Output` writer |
+| Lifetime | the **dynamic extent of the call**. A slice may be passed to another function that takes a slice, and to nothing else |
+| Storage | may not be returned, stored in a field, captured by a closure that outlives the call, or put in a collection (`E-MEM-060`) |
+| Lifetime safety | the caller keeps the source alive because a slice is only ever a parameter; there is no syntax that lets a slice outlive the value it views |
+| `sys` | allowed, and the normal way to pass a buffer without a length parameter |
+
+Why this is sound without a borrow checker: a `Slice<T>` cannot be named except as
+a parameter type, so its lifetime cannot escape the call that produced it. The
+compiler rejects every other use at parse or check time, which makes the check
+structural rather than inference-based.
+
+```vela
+fn checksum(data: Slice<UInt8>) -> UInt32 { ... }
+fn readAll(f: File) -> Result<Bytes, IoError> { ... }
+
+let all = try readAll(f)?
+let sum = checksum(all)                 # view, no copy
+let first = checksum(all[0..<16])       # view of a view
+```
+
+### 13.1 What this fixes
+
+* Zero-copy parsing without an arena: a CSV/JSON/binary parser reads a `Bytes` and
+  hands out slices.
+* `Str` operations that do not allocate: `str.split` on a slice, `trim`, `find`.
+* Passing a buffer to a `sys` function without a separate length argument.
+* ML kernels that take a `Slice<Float>` view of a tensor without copying (doc 21
+  §5's `TensorView` is a multi-dimensional slice).
+
+### 13.2 What it deliberately does not do
+
+* No mutable slice, so no aliasing of a writable region.
+* No slice stored in a struct, so no lifetime parameters anywhere.
+* No slicing across a reallocation: a slice is valid for the call, and a `List`
+  that is mutated during that call is a copy-on-write copy, so the view stays
+  valid (doc 09 §3).
+
+---
+
+## 14. Diagnostics added by this section
+
+| Code | Meaning |
+| --- | --- |
+| `E-MEM-060` | a `Slice<T>` used outside a parameter position |
+| `E-MEM-061` | a `Slice<T>` passed to a function that stores it |
+
 
 ---
 

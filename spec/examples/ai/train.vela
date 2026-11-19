@@ -1,0 +1,81 @@
+# spec example — AI, end to end. Not compiled by CI. Requires doc 36.
+
+use std::{json, time}
+use ai::{tensor, nn, train, tokenize, infer, serve}
+
+# ---------------------------------------------------------------- model
+
+#[derive(Module)]
+struct MLP {
+  fc1: Linear(784, 256)
+  fc2: Linear(256, 10)
+}
+
+impl MLP {
+  fn forward(self, x: Tensor<Float32, [?, 784]>) -> Tensor<Float32, [?, 10]> {
+    let h = nn.relu(self.fc1.forward(x))
+    self.fc2.forward(h)
+  }
+}
+
+fn loss(model: MLP, batch: Batch) -> Tensor<Float32> {
+  let logits = model.forward(batch.images)
+  nn.crossEntropy(logits, batch.labels)
+}
+
+# ---------------------------------------------------------------- training
+
+fn trainDigits() -> Result<MLP, Error> {
+  let device = tensor.device(.gpu(0)) ?? tensor.device(.cpu)
+  mut model = MLP.init(device: device, seed: 0)
+
+  let opt = train.adamW(model.params(), lr: 1e-3, weightDecay: 0.01)
+  let loader = data.fromCsv("digits.csv", schema: DigitRow)
+    .map(|r| r.toBatch())
+    .batch(64)
+    .shuffle(seed: 0)
+    .prefetch(2)
+
+  for epoch in 0..<5 {
+    for batch in loader {
+      let grads = train.grad(loss, model, batch)
+      opt.step(grads)
+      opt.zeroGrad()
+      metrics.observe("loss", loss(model, batch).scalar())
+    }
+    model.save("digits-${epoch}.safetensors")?
+  }
+  Ok(model)
+}
+
+# ---------------------------------------------------------------- inference
+
+fn serveModel(model: MLP) -> Result<Void, Error> {
+  let app = serve.new(model, device: tensor.device(.cpu))
+  app.route("/predict") { req |
+    let digits = try req.json::<[[Float32]]>()?
+    let x: Tensor<Float32, [?, 784]> = tensor.of(digits)
+    let scores = model.forward(x)
+    json.encode(Scores { classes: scores.argmax(axis: 1).toList() })
+  }
+  app.limits(concurrency: 4, queue: 16)
+  app.listen(port: 8090)
+}
+
+# ---------------------------------------------------------------- test
+
+#[test]
+fn gradientsMatchNumeric() {
+  let model = MLP.init(device: tensor.device(.cpu), seed: 1)
+  let batch = fixtures.batch()
+  let analytic = train.grad(loss, model, batch)
+  let numeric = train.numericGrad(loss, model, batch, epsilon: 1e-4)
+  assertNear(analytic, numeric, tolerance: 1e-3)
+}
+
+#[test]
+fn shapesAreStatic() {
+  let x: Tensor<Float32, [4, 784]> = tensor.zeros([4, 784])
+  let out: Tensor<Float32, [4, 10]> = MLP.init(device: tensor.device(.cpu), seed: 0).forward(x)
+  assertEq(out.shape, [4, 10])
+}

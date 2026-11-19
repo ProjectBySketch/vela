@@ -117,9 +117,24 @@ vela build --stats               # size and monomorphisation counts
 vela run --count-refs            # per-function retain/release counts (doc 09 §2)
 ```
 
-`vela bench` uses a bootstrap statistic (not a single run), reports ns/op with a
-confidence interval, and fails CI on a regression over the declared threshold.
-Benchmarks are functions:
+`vela bench` uses a fixed, documented method so two machines' numbers are
+comparable:
+
+| Step | Rule |
+| --- | --- |
+| warm-up | 1,000 iterations or 250 ms, whichever is longer, discarded |
+| measurement | at least 2 s or 10,000 iterations per benchmark, whichever is longer |
+| statistic | the **median** of per-iteration times, because the mean is a lie about noise |
+| interval | 95 % BCa bootstrap confidence interval, 10,000 resamples |
+| outlier handling | none; outliers are reported, not removed |
+| reporting | ns/op, bytes/op, allocations/op, and the CI, in machine-readable form |
+| comparison | a regression is significant when the confidence intervals do not overlap by more than the declared threshold |
+| environment | the compiler records CPU model, clock, compiler version and flags with every result |
+
+`--assert-regression 5%` fails the build when the median grows by more than 5 %
+with non-overlapping intervals, which is the only comparison a shared CI machine
+can honestly make.
+
 
 ```vela
 #[bench(iterations: 10_000, warmup: 1_000)]

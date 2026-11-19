@@ -1,0 +1,271 @@
+# 38 — Serialization, formats and data
+
+**Status:** `spec`. Modules: `json`, `cbor`, `msgpack`, `proto`, `toml`, `yaml`,
+`csv`, `parquet`, `data` (dataframes), `schema` (unstable). Closes the
+serialization gaps listed in doc 35.
+
+The rule for all of them: a format is **a type with a derive**, not a string API.
+A program describes its data once as a `struct` or `enum`, and every format is a
+flag on the derive plus a codec call. Nothing is hand-parsed.
+
+---
+
+## 1. One derive, many formats
+
+```vela
+#[derive(Serialize, Deserialize)]
+struct Order {
+  id: Uuid
+  customerId: Uuid
+  totalCents: Int
+  placedAt: Instant
+  mut notes: Str? = nil
+  items: List<OrderItem>
+  #[serde(rename: "schema_version")]
+  version: Int = 2
+}
+
+let json  = try json.encode(order)?
+let bytes = try cbor.encode(order)?
+let wire  = try msgpack.encode(order)?
+let file  = try toml.encode(config)?
+let page  = try parquet.encode(rows)?
+```
+
+`#[derive(Serialize, Deserialize)]` generates the field mapping once; each codec
+module supplies the wire details. Per-field attributes:
+
+| Attribute | Effect |
+| --- | --- |
+| `#[serde(rename: "x")]` | the on-the-wire name |
+| `#[serde(skip)]` | never encoded; defaults on decode |
+| `#[serde(default)]` / `default: expr` | missing → default |
+| `#[serde(renameAll: "snake_case")]` | apply a case convention to the struct |
+| `#[serde(flatten)]` | inline a nested struct's fields |
+| `#[serde(tag: "type")]` | internally tagged enum (JSON) |
+| `#[serde(with: module)]` | custom `String` codec for a field |
+| `#[serde(denyUnknown)]` | an unknown field is an error |
+
+A type that cannot represent its own round trip is `E-SER-010` at build time (a
+map with a non-`Str` key in JSON, a `Float` in a protobuf field labelled `int`).
+
+---
+
+## 2. Formats
+
+| Format | Module | Use | Notes |
+| --- | --- | --- | --- |
+| JSON | `json` | APIs, config, logs | shortest-round-trip floats (doc 16 §3.3), duplicate keys are an error |
+| JSON Lines | `json.lines` | streams of records | one value per line, no trailing comma |
+| CBOR | `cbor` | compact binary, canonical mode for signing | deterministic encoding when `canonical: true` |
+| MessagePack | `msgpack` | compact, widely implemented | extension types for `Instant`/`Uuid` |
+| Protobuf | `proto` | gRPC, cross-language | field numbers are part of the type; `#[derive(Proto)]` |
+| TOML | `toml` | `vela.pkg`-style config, human-edited | unknown key policy is explicit |
+| YAML | `yaml` | config written by humans | 1.2 core schema; anchors resolved with a size limit |
+| CSV | `csv` | exports, imports | RFC 4180, streaming reader/writer, header mapping |
+| Parquet | `parquet` | columnar analytics | typed by a schema derived from the struct |
+| Binary | `mem.binary` | fixed-layout records | doc 26 §7, `#[derive(Binary)]` |
+
+Every codec has the same three functions:
+
+```vela
+fn encode(value: T) -> Result<Bytes, SerError>
+fn decode(bytes: Bytes) -> Result<T, SerError>
+fn stream(reader: io.Reader) -> Result<Iterator<T>, SerError>
+```
+
+`SerError` carries `offset`, `path` (`items[3].price`), `expected` and `found`, so
+a malformed document reports where and what, not "invalid JSON".
+
+---
+
+## 3. Schema evolution
+
+Data outlives the program that wrote it, so the rules are stated per format:
+
+| Change | JSON/CBOR/MsgPack/TOML | Protobuf |
+| --- | --- | --- |
+| add an optional field | safe | safe (new field number) |
+| add a required field | breaking | breaking |
+| rename a field | breaking unless `rename` keeps the old name | safe (numbers, not names) |
+| remove a field | safe if readers have a default | reserve the number, never reuse |
+| change a type | breaking | breaking unless it is `int32`→`int64` |
+| reorder fields | safe in JSON, **breaking** in Binary | irrelevant |
+
+`#[derive(Serialize)]` records a `schema_version` field when the struct declares
+one. A decoder that sees a higher version than it knows is `E-SER-020` with the
+version it found, which turns "it silently lost a field" into a clear failure.
+
+### 3.1 Migrations for stored data
+
+```vela
+schema Data {
+  record Order at version 1 { total: Float }
+  record Order at version 2 { totalCents: Int }
+
+  migrate version 2 { from: 1 } {
+    |old: OrderV1| Order { totalCents: (old.total * 100.0).round() as Int, ... }
+  }
+}
+```
+
+`parquet.read` and `mem.binary.read` apply the migrations up to the current
+version, and a missing migration is `E-SER-030` at build time.
+
+---
+
+## 4. Validation
+
+Decoding checks shape; **validation** checks meaning, and it is a separate
+declared step so it cannot be forgotten:
+
+```vela
+impl Validate for Order {
+  fn validate(self) -> Result<Void, ValidationError> {
+    if self.totalCents < 0 { fail ValidationError.range("totalCents", min: 0) }
+    if self.items.isEmpty { fail ValidationError.empty("items") }
+    Ok(unit)
+  }
+}
+
+let order = try json.decode::<Order>(body)?.validated()?
+```
+
+* `decode` is total: it returns `Result` and never panics.
+* `.validated()` runs `Validate`, which is generated by `#[derive(Validate)]` from
+  field attributes (`#[validate(range: 0..100)]`, `#[validate(email)]`,
+  `#[validate(length: 1..120)]`) and can be extended by an `impl`.
+* An API handler that decodes without validating is `W-SER-010`, because that is
+  the bug shape of every "unvalidated input" incident.
+
+---
+
+## 5. Streaming and zero copy
+
+* `stream(reader)` decodes incrementally: JSON Lines, CBOR sequences, CSV rows and
+  Parquet row groups all yield an `Iterator<T>` with bounded memory.
+* `bytes.decode::<T>(offset)` decodes from a slice without copying the input; a
+  borrowed `Str` field is a copy (doc 35 §2: slices are `planned`), but the input
+  bytes are not duplicated.
+* `json.encodeInto(value, writer)` writes without building a `Bytes`.
+* A size limit is a parameter, not a hope: `decode(bytes, maxDepth: 32, maxBytes:
+  1 << 20)`; a document that exceeds it is `E-SER-040` before allocation.
+
+---
+
+## 6. Dataframes
+
+`data` is a typed columnar table for analytics — not a second language.
+
+```vela
+let sales = try data.readCsv("sales.csv", schema: Sale)?
+let byRegion = sales
+  .filter(|r| r.year == 2026)
+  .groupBy(.region)
+  .agg(.revenue.sum(), .orders.count(), .revenue.mean())
+  .sortBy(.revenue, .desc)
+
+println(byRegion.table())
+try byRegion.writeParquet("out.parquet")?
+```
+
+* A column is a typed `Column<T>`; a table is a set of named columns with a row
+  count. Operations are typed: `groupBy(.region)` is checked against the schema,
+  and `.revenue.sum()` requires `revenue` to be numeric (`E-SER-050`).
+* Lazy vs eager: `.lazy()` defers until `.collect()`, with the same operators; an
+  eager pipeline allocates per step and the docs say so.
+* Joins: `lazy.join(other, on: .id, kind: .inner)`, typed on both sides.
+* Nullability is a column property (`Column<Int?>`), and an aggregation over a
+  nullable column returns a nullable result — the one place where a silent `nil`
+  is the correct answer.
+* Window functions (`planned`), pivot (`planned`), and CSV/Parquet/JSON-lines I/O
+  are the surface.
+* `data` is not a database: it does not index, it does not persist, and it does not
+  claim to be faster than one. It is for files that fit in memory or stream
+  through once.
+
+---
+
+## 7. Choosing a format
+
+| Need | Use |
+| --- | --- |
+| an HTTP API a browser reads | JSON |
+| a compact payload between services | MessagePack or CBOR |
+| a strongly-typed cross-language contract | Protobuf |
+| a file a human edits | TOML (strict) or YAML (loose) |
+| a spreadsheet exchange | CSV |
+| analytics over large files | Parquet |
+| a fixed record in a device or file format | `mem.binary` + `#[stable]` |
+| signing a message | CBOR canonical |
+
+There is no XML module. XML is `planned` only if a real interop need appears; a
+language that ships an XML parser by default is a language making a promise about
+the past.
+
+---
+
+## 8. Security of deserialisation
+
+* A decoder never instantiates a type that was not declared in the schema.
+* Depth, size and element-count limits are required parameters with safe defaults
+  (doc 24 §4).
+* `any` fields (JSON `Any`, protobuf `Any`) are opt-in and are `E-SER-060` in a
+  `web` handler that accepts one, because that is the polymorphic deserialisation
+  hole.
+* YAML has no arbitrary-tag execution: tags are a closed set (`!!str`, `!!int`,
+  `!!map`, `!!seq`), and an unknown tag is `E-SER-061`.
+* A decoded `Str` used as a path, an SQL fragment or HTML follows doc 24 §4's safe
+  constructors; decoding does not sanitise, and it does not claim to.
+
+---
+
+## 9. Testing a format
+
+```vela
+#[test]
+fn roundTripsEveryFormat() {
+  let order = fixtures.order()
+  for codec in [json, cbor, msgpack, toml] {
+    let bytes = try codec.encode(order)?
+    let back = try codec.decode::<Order>(bytes)?
+    assertEq(back, order)
+  }
+}
+
+#[test]
+fn rejectsAnUnknownVersion() {
+  let bytes = json.encodeText("""{"schema_version": 99}""")
+  let err = json.decode::<Order>(bytes).unwrapErr()
+  assertEq(err, SerError::version(99))
+}
+
+#[test]
+fn fuzzDecoder() {
+  fuzz(bytes => { let _ = json.decode::<Order>(bytes) })   // planned
+}
+```
+
+`#[derive(Serialize)]` also generates a **golden fixture** in tests when asked
+(`#[serde(golden: "fixtures/order.json")]`), so a wire-format change becomes a
+diff in review rather than a production incident.
+
+---
+
+## 10. Diagnostics
+
+| Code | Meaning |
+| --- | --- |
+| `E-SER-010` | type cannot round trip in this format |
+| `E-SER-020` | document version newer than the program |
+| `E-SER-030` | no migration from an older stored version |
+| `E-SER-040` | document exceeds a declared limit |
+| `E-SER-050` | columnar operation on an incompatible column type |
+| `E-SER-060` | `Any`/polymorphic field in a web handler |
+| `E-SER-061` | unknown YAML tag |
+| `W-SER-010` | decode without validation |
+| `W-SER-020` | format used for a purpose it is unsuited to (JSON for analytics, CSV for nesting) |
+
+---
+
+Next: [39-cloud.md](39-cloud.md).

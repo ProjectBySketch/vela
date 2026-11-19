@@ -272,14 +272,89 @@ shared = { path = "../shared" }
 
 ## 10. The registry
 
-**Planned** (`registry.vela.dev`). The model:
+**Status:** registry protocol `spec`; hosted instance `planned` (`registry.vela.dev`).
 
-* Packages are immutable once published; `yank` hides a version from new
-  resolutions without breaking existing locks.
-* Every published package has a content hash in the lock file, verified on
-  download (`E-PKG-030` on mismatch).
-* `vela publish` requires a licence, a description and a passing test run.
-* `vela vendor` copies every dependency under `vendor/`; `--offline` uses it.
+A registry is a content-addressed store plus a name index. The protocol is small
+enough to implement, which is the point: a private registry is a first-class
+feature, not a fork of the toolchain.
+
+### 10.1 Publishing
+
+```
+POST /v1/packages/{scope}/{name}/{version}
+     body: application/octet-stream (the package archive)
+     headers: Authorization: Bearer <token>
+              X-Vela-Checksum: sha256:<hex>
+              X-Vela-Manifest: base64(vela.pkg)
+
+200  { "published": "...", "checksum": "sha256:..." }
+409  { "error": "version exists" }
+403  { "error": "scope not owned" }
+```
+
+* **Immutable.** A version, once published, can never be replaced; the registry
+  rejects a second upload with `409`, and the only remedy is a new version. This
+  is what makes a lock file meaningful.
+* **`yank`.** `POST /v1/packages/{scope}/{name}/{version}/yank` hides a version
+  from new resolutions. Existing locks keep working; a new resolution that would
+  pick it fails with a message naming the yank reason.
+* **Checksum.** The archive's SHA-256 is recorded; `vela build` verifies it on
+  download (`E-PKG-030`).
+* **Scope ownership.** A scope is claimed once and owned by an account or an
+  organisation; publishing into it requires a token with `publish` on that scope.
+* **Validation on upload.** The registry runs `vela build --frozen` and
+  `vela test` in a sandbox before accepting; a package that fails is rejected with
+  the log. (A registry that hosts broken packages is a registry nobody uses twice.)
+* **Size and file limits.** 50 MiB per package; no binaries outside `assets/`
+  unless the package declares `[package] binaries = true`.
+* **Licence.** A `license` field is required and is shown on the page; a package
+  without one is rejected.
+
+### 10.2 Resolving
+
+```
+GET /v1/packages/{scope}/{name}
+     → { versions: [...], yanked: [...], latest: "1.4.2" }
+GET /v1/packages/{scope}/{name}/{version}/download
+     → the archive
+GET /v1/search?q=database&profile=core&sort=downloads
+```
+
+Resolution uses the versions index, then downloads by exact version. Every
+download is verified against the lock's hash; a registry compromise therefore
+cannot silently change a dependency that is already locked.
+
+### 10.3 Authentication
+
+* Tokens are scoped (`publish`, `yank`, `read:private`) and revocable.
+* Two-factor is required to create a token that can publish into an organisation.
+* CI tokens expire (default 90 days) and are bound to a repository when the
+  registry is GitHub-integrated.
+* `vela login` stores the token in the platform's secret store (doc 24 §3), never
+  in `vela.pkg` or a shell history.
+
+### 10.4 Private registries
+
+```toml
+[registry]
+default  = "https://registry.vela.dev"
+private  = "https://packages.acme.internal"
+scope    = { "acme" = "private" }
+```
+
+A package in a `private` scope resolves from the private registry and nowhere
+else; a public dependency of a private package resolves from the default. This is
+one configuration block, and `vela vendor` still produces an offline tree.
+
+### 10.5 Moderation and takedown
+
+* A report opens a review; a confirmed malware report yanks the version and blocks
+  the publisher.
+* A takedown is recorded permanently: the version stays in the index as
+  `"taken_down": true` with a reason, so a build that depended on it fails with an
+  explanation instead of "not found".
+* Namesquatting policy: a scope that publishes nothing for 12 months may be
+  reclaimed after notice.
 
 ---
 

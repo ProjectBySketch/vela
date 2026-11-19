@@ -139,7 +139,28 @@ Rules for shader bodies — deliberately narrower than a function:
 * `if` and `for` are allowed with compile-time bounds; a dynamic loop bound is
   `E-GFX-010` (GPU divergence is not a thing to guess about);
 * recursion is `E-GFX-011`;
-* a uniform is read-only, a varying is interpolated, an `out` is written once.
+* a uniform is read-only, a varying is interpolated, an `out` is written once;
+* `comptime` is allowed: a shader may fold a lookup table, a kernel weight or a
+  branch condition at build time, and the result is embedded as a constant array
+  in the generated MSL/WGSL/SPIR-V. This is what makes a procedural material or a
+  convolution kernel a build-time artefact rather than a uniform the CPU fills in.
+
+```vela
+shader vignette(fragment) {
+  in uv: Vec2
+  uniform strength: Float
+  out Frag { color: Vec4 }
+
+  const FALLOFF: [[Float; 16]; 16] = comptime { buildFalloff(16) }
+  let x = Int(uv.x * 15.0)
+  let y = Int(uv.y * 15.0)
+  return Frag { color: Vec4(1.0) * (1.0 - FALLOFF[y][x] * strength) }
+}
+```
+
+A `comptime` value in a shader follows doc 12 §1's rules exactly, including the
+step budget; the only difference is that the result must be a numeric array or
+scalar, since a shader has no heap.
 
 The advantage over writing GLSL is the same one Vela has everywhere: the
 `Material.standard(...)` and the shader that extends it share types, so a
@@ -157,8 +178,28 @@ compute blur(input: Texture, output: Texture, radius: Int) {
 
 `compute` takes workgroup size from the declaration (`#[workgroup(16, 16, 1)]`),
 reads and writes storage buffers/textures, and is launched with
-`world.dispatch(blur, groups: (w/16, h/16, 1))`. `sys` gets a software fallback
-that is slow but correct, so a program that uses compute still runs everywhere.
+`world.dispatch(blur, groups: (w/16, h/16, 1))`.
+
+### 5.2 The software fallback
+
+Every target that has no GPU (a `sys` kernel with a framebuffer, a machine with no
+Vulkan driver, a test runner in CI) still runs a `compute` shader, through a
+generated CPU implementation:
+
+* the compiler emits a scalar version of the shader body by replacing
+  `global.invocation` with a loop over the workgroup, and `local shared` with an
+  array on the stack;
+* `world.dispatch` runs that loop over the groups on the task pool;
+* it is 20–200× slower and it is **correct**, which is the trade the spec makes:
+  a test that needs a GPU is not a test.
+
+A shader using an operation with no scalar equivalent (a texture format the CPU
+cannot sample, a subgroup intrinsic) reports `E-GFX-060` **at build time for a
+target without a GPU**, naming the operation, rather than failing at run time on
+someone's machine.
+
+`vela build --gfx-stats` reports, per shader: GPU variants emitted, whether a CPU
+fallback exists, and the fallback's estimated cost.
 
 ---
 

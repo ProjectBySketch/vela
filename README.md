@@ -169,7 +169,7 @@ read in one sitting.
 ## The specification
 
 Everything above describes what the compiler does **today**. What the language is
-meant to become is written down in [`spec/`](spec/README.md): thirty-five documents
+meant to become is written down in [`spec/`](spec/README.md): thirty-nine documents
 covering a full programming language in four profiles.
 
 | Profile | Replaces | Status |
@@ -200,8 +200,24 @@ Highlights of the specification, so the scale is auditable rather than claimed:
 * **A systems profile** (doc 15) with `mmio` register blocks, `#[interrupt]`,
   `asm!`, `#[entry]`, page allocators, and no runtime at all — enough to write an
   operating system kernel.
-* **40 core standard library modules** plus 18 specialised ones (graphics, media,
-  games, databases, i18n, plugins, embedded), with over 1,100 items.
+* **40 core standard library modules** plus ~30 specialised ones (graphics, media,
+  games, databases, AI, serialization, i18n, plugins, embedded, deployment), with
+  over 1,100 items.
+* **Machine learning in the language** (doc 36): tensors whose shapes are checked at
+  compile time, reverse-mode autodiff over ordinary Vela functions, models as
+  structs, tokenisers, inference from safetensors/GGUF/ONNX with KV caching and
+  streaming, quantisation, embeddings that plug into doc 20's vector search, and
+  evaluation suites that fail CI.
+* **A complete OS construction doc** (doc 37): processes, address spaces, a VFS and
+  a `FileSystem` trait, a driver framework with IRQ split, typed IPC, syscalls with
+  generated userland stubs and `UserPtr` validation, capabilities, `init`,
+  services, a POSIX compatibility layer, and QEMU/fault-injection testing.
+* **Every data format a program needs** (doc 38): one `Serialize` derive across
+  JSON, CBOR, MessagePack, Protobuf, TOML, YAML, CSV and Parquet, schema evolution
+  with stored-data migrations, validation as a declared step, and typed dataframes.
+* **Deployment and operations** (doc 39): typed configuration, container/OCI and
+  static deploy adapters, canaries with automatic rollback, OpenTelemetry traces,
+  metrics and logs, health checks and graceful shutdown.
 * **Specialised subsystems, specified in full**: typed SQL with compile-time
   checked queries and migrations (doc 20), 2D/3D rendering with shaders written in
   Vela (doc 21), image/audio/video pipelines (doc 22), HTTP/2 and QUIC with a

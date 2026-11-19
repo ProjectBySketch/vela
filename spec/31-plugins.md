@@ -161,6 +161,37 @@ abi          = 3
 `vela plugin build` produces the artifact and a manifest with its hash, which the
 host verifies before loading (`E-PLUG-040` on mismatch).
 
+### 6.1 Distribution
+
+A plugin is published like any package (doc 08 §10), with two additions:
+
+* the registry indexes its **capabilities**, `provides` and ABI version, so a host
+  can search for "a plugin that provides `metrics.query` and needs no network";
+* the artifact is signed (doc 24 §7.1) and the host verifies the publisher.
+
+A host that installs plugins from a catalogue pins both the package version and the
+plugin artifact hash:
+
+```toml
+[plugins]
+metrics = { package = "acme/metrics", version = "1.2.0", hash: "sha256:…",
+            capabilities = { network = [] } }
+```
+
+The `hash` is what makes the catalogue a signed index rather than a redirect: a
+plugin update is a deliberate manifest change, and a host that receives a
+different bytes for the same version refuses to load it.
+
+There is no third-party marketplace in this specification. A registry of plugin
+metadata is a package registry with extra fields (above), and building a
+commercial store on top of it is an application, not a language feature. What the
+language promises is the part that matters: **a published plugin's artifact is
+immutable, signed and pinned by hash**, and a host that verifies those three things
+is not trusting the catalogue.
+
+---
+
+
 ---
 
 ## 7. Testing a plugin

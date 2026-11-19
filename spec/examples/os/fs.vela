@@ -1,0 +1,131 @@
+# spec example — a filesystem driver and a syscall. Not compiled by CI.
+# Requires doc 37.
+
+use sys::{page, port, interrupts, cpu}
+
+# ---------------------------------------------------------------- VFS types
+
+pub type Inode = UInt64
+
+pub enum NodeKind { file, directory, device, symlink }
+
+pub struct DirEntry {
+  name: Str
+  inode: Inode
+  kind: NodeKind
+}
+
+pub enum FsError {
+  notFound
+  notADirectory
+  noSpace
+  readOnly
+  corrupt(detail: Str)
+  io(code: Int)
+}
+
+pub trait FileSystem {
+  fn lookup(self, path: Str) -> Result<Inode, FsError>
+  fn read(self, inode: Inode, offset: UInt64, into: Slice<UInt8>) -> Result<IntSize, FsError>
+  fn write(mut self, inode: Inode, offset: UInt64, from: Slice<UInt8>) -> Result<IntSize, FsError>
+  fn readDir(self, inode: Inode, at: UInt64) -> Result<List<DirEntry>, FsError>
+  fn create(mut self, dir: Inode, name: Str, kind: NodeKind) -> Result<Inode, FsError>
+  fn sync(mut self) -> Result<Void, FsError>
+}
+
+# ---------------------------------------------------------------- block device
+
+pub struct BlockDevice {
+  irq: Irq
+  base: Mmio<VirtioRegs>
+  mut sectors: UInt64
+}
+
+impl BlockDevice {
+  pub fn probe(device: PciDevice) -> Result<BlockDevice, Error> {
+    let base = device.mapBar(0)?
+    let dev = BlockDevice { irq: device.irq, base, sectors: 0 }
+    dev.base.reset.read()
+    dev.base.status.write(0)
+    dev.base.status.write(1)
+    dev.sectors = dev.base.capacity.read() as UInt64
+    interrupts.register(dev.irq, defer: fn() { dev.onInterrupt() })
+    Ok(dev)
+  }
+
+  pub fn readSectors(self, first: UInt64, into: Slice<UInt8>) -> Result<Void, FsError> {
+    let bytes = into.len
+    if bytes % 512 != 0 { return Err(FsError.io(22)) }
+    self.base.dmaAddr.write(dma.physical(into.ptr()))
+    self.base.sector.write(first)
+    self.base.count.write((bytes / 512) as UInt32)
+    self.base.command.write(1)
+    while self.base.status.read() & 1 != 0 { cpu.pause() }
+    if self.base.status.read() & 2 != 0 { return Err(FsError.io(5)) }
+    Ok(unit)
+  }
+}
+
+# ---------------------------------------------------------------- a tiny read-only filesystem
+
+pub struct RamFile {
+  data: Slice<UInt8>
+}
+
+pub struct RamFs {
+  root: List<RamFile>
+}
+
+impl FileSystem for RamFs {
+  fn lookup(self, path: Str) -> Result<Inode, FsError> {
+    let name = path.trimStart("/")
+    for i in 0..<self.root.len {
+      if self.root[i].name() == name { return Ok(i as Inode) }
+    }
+    Err(FsError.notFound)
+  }
+
+  fn read(self, inode: Inode, offset: UInt64, into: Slice<UInt8>) -> Result<IntSize, FsError> {
+    let file = self.root.at(inode as Int) or return Err(FsError.notFound)
+    let data = file.data
+    if offset >= data.len { return Ok(0) }
+    let n = num.min(into.len, data.len - offset)
+    into.copyFrom(data.sub(offset, n))
+    Ok(n)
+  }
+
+  fn write(mut self, inode: Inode, offset: UInt64, from: Slice<UInt8>) -> Result<IntSize, FsError> {
+    Err(FsError.readOnly)
+  }
+
+  fn readDir(self, inode: Inode, at: UInt64) -> Result<List<DirEntry>, FsError> {
+    if inode != 0 { return Err(FsError.notADirectory) }
+    self.root.map(|f| DirEntry { name: f.name(), inode: f.index() as Inode, kind: .file })
+  }
+
+  fn create(mut self, dir: Inode, name: Str, kind: NodeKind) -> Result<Inode, FsError> {
+    Err(FsError.readOnly)
+  }
+
+  fn sync(mut self) -> Result<Void, FsError> { Ok(unit) }
+}
+
+# ---------------------------------------------------------------- syscall
+
+#[syscall(0)]
+fn sysRead(fd: Int, buf: UserPtr<UInt8>, len: IntSize) -> Result<IntSize, Errno> {
+  let slice = try process.current().validate(buf, len, write: true)?
+  let file = try process.current().descriptor(fd)?
+  file.read(slice).mapErr(fn(e) { Errno.io })
+}
+
+#[test]
+#[target("x86_64-unknown-linux-gnu")]
+fn ramFsReads() {
+  let fs = RamFs { root: [RamFile { data: bytes.fromStr("hello") }] }
+  let inode = try fs.lookup("/a.txt")?
+  let mut buf = bytes.withCapacity(16)
+  let n = try fs.read(inode, 0, buf.view())?
+  assertEq(n, 5)
+  assertEq(buf.toString().unwrap(), "hello")
+}

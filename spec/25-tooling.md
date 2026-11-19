@@ -173,6 +173,35 @@ vela test --gdb --filter floodFill
 `vela doc --diff <version>` lists public API changes between two versions — the
 input to a release note, and to the `W-API-010` lint.
 
+### 6.1 The generated site
+
+A theme is a package that declares three views and a token set, using the same UI
+language as an app (doc 13):
+
+```vela
+// themes/acme-docs/theme.vela
+theme Docs {
+  token.ink = #111827
+  token.brand = #2563EB
+  token.space = (sm: 8dp, md: 16dp, lg: 32dp)
+}
+
+view Sidebar(tree: List<Item>, current: Str) { ... }
+view Page(doc: Doc, prev: Doc?, next: Doc?) { ... }
+view Search(query: Str, results: List<Hit>) { ... }
+```
+
+* `vela doc --theme acme/acme-docs` renders the site with that package; the
+  default theme is a package too, so there is no special case.
+* The output is static HTML plus the compiled WASM for the search island, so a
+  documentation site is deployed by doc 39's `static` adapter like any other site.
+* A theme receives a typed model (`Doc`, `Item`, `Hit`) rather than HTML strings,
+  which is why a theme cannot produce an unescaped injection and why the same
+  theme works for a `core`, `app` or `web` package.
+* Doc tests and examples are rendered by the same views as the API reference, so a
+  code block is always syntax-highlighted by the compiler's own lexer.
+
+
 ---
 
 ## 7. REPL
@@ -262,6 +291,38 @@ and nothing else is created by the toolchain.
 
 ---
 
+## 10.1 Test doubles
+
+Every fake in the specification (`net.fake`, `hal.fakeI2c`, `testHost`,
+`db.testDialect`, `game.headless`) is an instance of one shared base, so a team
+writes a fake once:
+
+```vela
+let clock = test.fake(FakeClock { now: Instant.epoch })
+clock.advance(5s)
+assertEq(clock.now(), Instant.epoch + 5s)
+
+let fs = test.fake(FakeFs { files: {"a.txt": "hello"} })
+assertEq(try fs.readStr("a.txt")?, "hello")
+
+let http = test.fake(FakeHttp { routes: {...} })
+```
+
+| Building block | Purpose |
+| --- | --- |
+| `test.fake(impl)` | wraps an implementation of a trait, records calls, allows assertions |
+| `test.spy(real)` | delegates to a real implementation and records |
+| `expect(call).twice()` | a call-count assertion that fails with the actual sequence |
+| `test.clock()` | a clock under the test's control, injected into anything that takes an `Instant` source |
+| `test.timeout(d)` | fails a test that hangs rather than hanging CI |
+
+The rule that makes this work is a language rule, not a testing one: anything that
+reads the clock, the network or the filesystem takes it as a parameter (an
+interface), so it can be replaced. A function that calls `time.now()` directly is
+`W-TOOL-020` in a package that has tests.
+
+---
+
 ## 11. Diagnostics
 
 | Code | Meaning |
@@ -271,6 +332,7 @@ and nothing else is created by the toolchain.
 | `E-TOOL-030` | formatter could not parse (it formats valid code only) |
 | `E-TOOL-040` | `vela doc` failed on a broken doc link |
 | `W-TOOL-010` | `vela fmt --check` found differences |
+| `W-TOOL-020` | ambient clock/network/filesystem in a package with tests |
 | `W-API-010` | breaking change in a published package's public API |
 
 ---

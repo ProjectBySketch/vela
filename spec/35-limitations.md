@@ -18,43 +18,78 @@ around; one that is not is a lie by omission.
 * a compiler that emits C and calls `clang`/`cc`;
 * packaging to a native binary, a DMG, a DEB and an iOS app.
 
-This specification describes roughly **58 standard library modules, 60 reserved
+This specification describes roughly **70 standard library modules, 60 reserved
 keywords, 24 types, 59 attributes, four profiles and 214 style properties**. The
 distance is the roadmap, and no document here closes it. A reader should treat
 every `spec` marker as "designed, not built" — that is exactly what doc 00 means.
 
 ---
 
-## 2. Not yet written
+## 2. Closed since the first draft
 
-These are known holes **in the specification**, not in the compiler. They are
-listed so that nobody assumes they are settled.
+Every area that was listed here as unwritten has been specified. This table is
+the audit trail: the gap, and where the answer now lives.
 
-| Area | Gap | Consequence today |
+| Was missing | Now specified in |
+| --- | --- |
+| borrowed slices | [09-memory.md](09-memory.md) §13 — call-scoped `Slice<T>`, sound without lifetimes |
+| `const` generics | [07-generics.md](07-generics.md) §10 — value parameters, arrays, `where` clauses |
+| variance for user generics | [07-generics.md](07-generics.md) §7 — derived from position, mutation check |
+| coroutine frame memory | [10-concurrency.md](10-concurrency.md) §14 — no allocation before the first suspension |
+| `comptime` in shaders | [21-graphics.md](21-graphics.md) §5 — folded tables in shaders |
+| C++ interop | [17-ffi.md](17-ffi.md) §3.2 — `extern "cxx"` with a generated shim |
+| Objective-C runtime and protocols | [17-ffi.md](17-ffi.md) §3.1 — real classes, selectors, ARC, delegates |
+| reflection in `strict` | [12-metaprogramming.md](12-metaprogramming.md) §5.1 — `#[reflect]` per type |
+| registry protocol | [08-modules.md](08-modules.md) §10 — publishing, resolving, auth, private registries |
+| package signing and SBOM | [24-security.md](24-security.md) §7.1–7.2 |
+| streaming SSR | [14-web.md](14-web.md) §11 — shell, suspense, chunking rules |
+| service workers | [14-web.md](14-web.md) §10 — behind `#![serviceWorker]` |
+| accessibility platform mapping | [13-ui.md](13-ui.md) §13.1 — UIKit/AppKit/DOM tables |
+| text shaping | [13-ui.md](13-ui.md) §9.3.1 — the six-stage pipeline |
+| `#[derive(Binary)]`, `#[stable]` | [26-abi.md](26-abi.md) §7 — field options, size checks, frozen layouts |
+| `#[derive(Proto)]` | [38-serialization.md](38-serialization.md) §1–2, [23-networking.md](23-networking.md) §12 |
+| GPU compute fallback | [21-graphics.md](21-graphics.md) §5.2 — generated CPU implementation |
+| plugin distribution | [31-plugins.md](31-plugins.md) §6.1 — signed, hash-pinned registry entries |
+| metrics and tracing wire format | [39-cloud.md](39-cloud.md) §5 — OpenTelemetry over OTLP |
+| `vela deploy` | [39-cloud.md](39-cloud.md) §4 — adapters, canary, rollback |
+| mock/fake framework | [25-tooling.md](25-tooling.md) §10.1 — one `test.fake` base |
+| benchmark statistics | [27-performance.md](27-performance.md) §6 — median, BCa bootstrap, regression rule |
+| docs site generator | [25-tooling.md](25-tooling.md) §6.1 — themes are view packages |
+
+And three whole subsystems were missing and are now specified:
+
+| Was missing | Now specified in |
+| --- | --- |
+| AI and machine learning | [36-ai.md](36-ai.md) — tensors, autodiff, training, inference, serving |
+| building an operating system | [37-kernel.md](37-kernel.md) — processes, VM, VFS, drivers, IPC, POSIX |
+| serialization and data | [38-serialization.md](38-serialization.md) — nine formats, validation, dataframes |
+| deployment and operations | [39-cloud.md](39-cloud.md) — containers, config, observability, scaling |
+
+---
+
+## 2.1 What is still not specified
+
+The honest remainder, with what a program does in the meantime.
+
+| Area | State | Workaround |
 | --- | --- | --- |
-| slices | no borrowed slice type; slicing a `List` copies | zero-copy parsing needs an arena; `planned` for a `Slice<T>` with a scope-bound lifetime |
-| `const` generics | syntax reserved, semantics not written | fixed-size buffers in `sys` use `Ptr` + a declared length |
-| variance | only `List` is variant; rules for user generics unstated | safe but occasionally requires a copy |
-| coroutine memory | where an `async fn` frame is allocated is unspecified | an `async` call may allocate; the cost is not in the finished contract |
-| `comptime` in shaders | shader bodies may not use `comptime` | a shader cannot generate a lookup table at build time |
-| C++ interop | doc 17 covers C, not C++ classes/templates | a C++ library needs a C shim |
-| Objective-C runtime | `#[objc]` is specified, protocol conformance details are not | doc 17 §3 is `planned` as a whole |
-| reflection in `strict` | `Type.of` is `comptime`-only | a serialiser that must discover a type at run time cannot be written in `strict` |
-| registry | `vela.pkg`, lock and features are specified; the registry's API, auth and moderation are not | publishing has no server |
-| package signing | mentioned as `planned` in doc 24 §7 | `vela audit`/SBOM are placeholders |
-| streaming SSR | doc 14 §11 covers the shell only | a streamed response is `planned` |
-| service workers, workers | `web.worker` is sketched | offline web apps are `planned` |
-| accessibility platform mapping | properties and roles are specified; the exact UIKit/AppKit/DOM mapping tables are not | a renderer must improvise the last mile |
-| text shaping | `text` is specified; the shaping engine (HarfBuzz-class) is not | complex scripts depend on the platform |
-| `#[derive(Binary)]`, `#[stable]` | used in doc 26 §7, not defined | the persisted-format story is incomplete |
-| `#[derive(Proto)]` | named in doc 23 §4, not defined | gRPC message types are `planned` |
-| GPU compute fallback | doc 21 promises a software fallback on `sys`, with no algorithm | a `sys` program using compute has no shipped path yet |
-| plugin marketplace | doc 31 covers loading, not distribution | there is no catalogue of plugins |
-| metrics/tracing standard | doc 23 §9 assumes sinks, not a wire format | observability is conventional, not specified |
-| `vela deploy` | mentioned in doc 14 §13, not specified | deploying is "copy the dist tree or run the binary" |
-| mock/fake framework | fakes are described per module (`net.fake`, `hal.fakeI2c`, `testHost`) with no shared base | three conventions instead of one |
-| benchmark statistics | doc 27 promises confidence intervals, names no method | numbers may not be comparable across machines |
-| docs site generator | `vela doc` is specified; the HTML output format is not | nobody can write a theme |
+| Windows target | not designed; the IO and thread model are POSIX-shaped | WSL, or a Linux binary in a container |
+| 32-bit desktop | `Int` is 64-bit on every target | a microcontroller target, or a `sys` build |
+| `i128`/`u128` | absent; `Int` is 64-bit and `Bytes` covers wide arithmetic | `crypto`'s wide-integer helpers |
+| borrowed mutable slices | deliberately absent (doc 09 §13.2) | a `mut` value, or an `Output` writer |
+| stackful coroutines | `async` is stackless (doc 10 §14) | `spawn` a task for deep recursion across an `await` |
+| higher-kinded types | not planned (doc 07 §11) | associated types |
+| XML | not specified | a package, when a real need appears |
+| binary compatibility with Linux | not a goal (doc 37 §10) | recompile against the Vela libc |
+| struct packing pragmas per target | only `#[repr(packed)]` | explicit field types and padding fields |
+| WASI preview 2 preview | `wasm32-wasi` is specified against the stable surface | a WASI 0.2 adapter is `planned` |
+| GPU on `sys` | compute has a CPU fallback, no GPU driver | software rendering, documented as slow |
+| distributed training | not specified (doc 36 §13 covers local devices) | data-parallel over a `Channel` is a package |
+
+Each of these is a real gap. None of them blocks the four things the language is
+for: an OS, a styled website, an app, or an AI program. That is the bar this
+document applies, and it is why the list is short and specific rather than long and
+apologetic.
 
 ---
 

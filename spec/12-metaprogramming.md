@@ -265,15 +265,40 @@ This is what lets a serialiser, an ORM or a UI binder be written in Vela rather
 than in a compiler plugin. It is compile-time only; the descriptor is not in the
 binary unless the program asks for runtime reflection.
 
-### 5.1 Runtime reflection (`loose` only)
+### 5.1 Runtime reflection
 
 ```vela
 let t = typeName(x)                # "Point"
 let fields = reflect.fields(x)     # Map<Str, Any>
 ```
 
-Available in `loose` mode for scripting and debugging; `planned` for `strict`
-behind `#[reflect]`, because it defeats whole-program optimisation.
+In `loose` mode this is always available. In `strict` mode it is available on a
+type that opts in, because reflection defeats whole-program optimisation and makes
+the type's shape part of its public API:
+
+```vela
+#[reflect]
+shared struct PluginConfig {
+  name: Str
+  version: Int
+}
+
+let desc = reflect.typeOf(PluginConfig::class)
+desc.fields()                       # name, type, offset, mutability
+```
+
+| Rule | Detail |
+| --- | --- |
+| Opt-in | `#[reflect]` on the type; reading metadata of a type without it is `E-META-050` |
+| What is kept | names, types, offsets, enum variants, conformances — not method bodies |
+| Cost | one static table per reflected type, in `.rodata`; a program with no `#[reflect]` has no tables |
+| `strict` interaction | a reflected field's name is part of the API: renaming it is a breaking change (`W-API-010`) |
+| Generic types | reflected per instantiation, capped by `#[genericSize]` |
+
+The intended use is a plugin boundary (doc 31), a config loader and a debugging
+overlay — not a serialiser, which should use `#[derive]` (doc 38) and stay
+monomorphised.
+
 
 ---
 

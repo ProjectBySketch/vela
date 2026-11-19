@@ -149,15 +149,51 @@ deprecated cipher in a binary is a finding in an audit, not a review comment.
 | lock file with content hashes | `spec` (doc 08 §5) |
 | `vela build --frozen` in CI | `spec` |
 | `vela audit` (advisories for dependencies) | `planned` |
-| package signing (sigstore or a registry key) | `planned` |
-| reproducible builds (byte-identical artifacts) | `spec` |
-| SBOM emission (`vela build --sbom cyclonedx.json`) | `planned` |
+| package signing (sigstore keyless or a registry key) | `spec`, below |
+| reproducible builds (byte-identical artifacts) | `spec` (doc 26 §8) |
+| SBOM emission (`vela build --sbom cyclonedx.json`) | `spec`, below |
 | vendoring and offline builds | `spec` |
 | deny-list of packages in `vela.pkg` | `spec` |
 
 A build prints its inputs: compiler version, every dependency with its hash, the
 permission set, and the flags. `vela build --print-config` emits that as JSON for
 a CI job to diff against the approved set.
+
+### 7.1 Signing and verification
+
+Two modes, both offline-verifiable:
+
+* **Keyless (sigstore).** `vela publish --sign` obtains a short-lived certificate
+  bound to the CI identity (an OIDC token), signs the package archive, and
+  uploads the signature plus a transparency-log entry. A consumer verifies with
+  `vela verify` against the log; no long-lived key exists to leak.
+* **Key-based.** `vela publish --sign key.pem` signs with an Ed25519 key declared
+  in `[package] signingKey`, for an air-gapped registry. The public key is
+  published alongside the package.
+
+```sh
+vela verify acme/db@1.4.0          # checks hash, signature and log entry
+vela verify --all                  # every locked dependency
+```
+
+Verification rules:
+
+* A lock file records the signature identity (or key fingerprint) at first
+  resolution. A later download with a different identity is `E-SEC-060` — this is
+  the "a dependency was taken over" alarm, and it fires before the code runs.
+* `vela build --require-signatures` refuses any dependency without a verified
+  signature.
+* A signature covers the archive's content hash, not the version number, so a
+  registry cannot swap a version.
+
+### 7.2 SBOM
+
+`vela build --sbom cyclonedx.json` writes a CycloneDX document listing every
+package, version, hash, licence, and the permissions each requests. It is
+generated from the same lock file the build uses, so it cannot drift from the
+artifact. `vela sbom verify` checks an SBOM against a built binary's embedded
+manifest hash.
+
 
 ---
 

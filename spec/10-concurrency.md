@@ -337,7 +337,40 @@ rather than silently serialising.
 
 ---
 
-## 14. Diagnostics
+## 14. Coroutine frames
+
+An `async fn` compiles to a state machine. Where that state lives is specified,
+because "an async call may allocate" is exactly the kind of hidden cost Vela
+refuses to have.
+
+| Rule | Detail |
+| --- | --- |
+| Size | the frame is the union of every local that is live across an `await`, plus the state index; `vela build --stats` prints the largest frame per function |
+| Allocation | **none** until the first suspension. A task that never suspends runs entirely on the caller's stack |
+| After a suspension | the frame is moved to an allocation of exactly its size, from the current allocator; it is freed when the task completes, is cancelled, or is dropped |
+| `#[inlineFrame]` | the compiler must prove the frame fits a declared `maxFrame` (default 4 KiB); otherwise `E-CONC-080` |
+| What cannot be held across `await` | a `Mutex` guard, an actor's `self`, a `Slice<T>`, a `borrow` (doc 09 §13) — the last two because a frame outlives the call scope that produced them |
+| `sys` | a frame may be allocated from a caller-provided arena, or the task runs to completion on the stack under `#[stackFrame]` |
+| `web` | frames live in the WASM heap; the size is reported in `--stats` because the browser's memory is the budget |
+
+```vela
+async fn load() -> Result<Data, Error> {
+  let a = prepare()            // stack, before the first suspension
+  let b = try await fetch()?   // frame moves to the heap here
+  combine(a, b)
+}
+```
+
+The two consequences a program can rely on:
+
+* an `async fn` that never awaits (a wrapper, a trait default) costs no
+  allocation;
+* a task's peak memory is its frame plus what it awaits, and `--stats` gives the
+  number per function rather than a hand-wave.
+
+---
+
+## 15. Diagnostics
 
 | Code | Meaning |
 | --- | --- |
@@ -347,8 +380,9 @@ rather than silently serialising.
 | `E-CONC-030` | `parallel for` body captures a non-`Share` value |
 | `E-CONC-040` | non-`Send` value captured by `spawn` |
 | `E-CONC-050` | `thread` used in `app` or `web` |
-| `E-CONC-060` | `await` in a `sys` module without a scheduler |
+| `E-CONC-060` | `await` in a `sys` package without a chosen runtime |
 | `E-CONC-070` | channel used after `close()` for sending |
+| `E-CONC-080` | coroutine frame larger than the declared `maxFrame` |
 | `W-CONC-010` | `Share` list mutated inside `parallel for` |
 | `E-RUN-050` | actor deadlock detected |
 

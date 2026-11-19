@@ -209,10 +209,37 @@ struct Record {
 }
 ```
 
-`#[derive(Binary)]` (planned) gives `encode`/`decode` that write exactly the
-struct's layout in little-endian (or `endian: .network`), with no field names, no
-padding and no ambiguity. Combined with `comptime` size checks, a file format or a
-packet is a struct plus a version field.
+`#[derive(Binary)]` gives `encode`/`decode` that write exactly the struct's layout,
+with no field names and no ambiguity:
+
+```vela
+#[derive(Binary)]
+#[repr(C, packed)]
+struct Header {
+  magic: UInt32          # 4 bytes, little-endian by default
+  version: UInt16
+  kind: UInt8
+  length: UInt32
+}
+
+let bytes = header.encode()?                       # 11 bytes, byte for byte
+let back = Header.decode(bytes)?                   # checks length first
+let net = header.encode(endian: .network)?         # big-endian on the wire
+```
+
+| Option | Meaning |
+| --- | --- |
+| `endian: .little` (default), `.network` | byte order for every multi-byte field |
+| `#[binary(length: 16)]` on a `Bytes` field | fixed-width field, zero-padded |
+| `#[binary(lenPrefix: UInt16)]` on a `Str`/`List` | variable-length field with a prefix |
+| `#[binary(until: 0)]` on a `Bytes` field | NUL-terminated, for legacy formats |
+| `#[binary(skip: 4)]` | reserved bytes written as zero and ignored on decode |
+
+Decoding is total and never trusts the input: a `#[binary(from: other)]` field maps
+onto a named field, every read is bounds-checked against the buffer length
+(`E-SER-040` style limits apply), and a struct whose declared size disagrees with
+its layout is `E-ABI-070` **at compile time** — the one bug a binary format cannot
+afford to find at run time.
 
 For a format that must survive a compiler change, an edition pin is required:
 
@@ -222,8 +249,14 @@ For a format that must survive a compiler change, an edition pin is required:
 struct Record { ... }
 ```
 
-A change to a `#[stable]` struct's layout is `E-ABI-060` — the compiler refuses to
-silently break a format someone stored on disk.
+`#[stable]` means: the layout, the field order and the encoding are frozen for the
+edition. A change to a `#[stable]` struct's layout — adding a field, reordering,
+changing a type — is `E-ABI-060`, and the fix is a new version of the struct with a
+migration (doc 38 §3.1), not an edit to the old one.
+
+`vela doc --abi` prints every `#[stable]` type with its exact byte layout, which is
+the document an implementer of the format on another platform reads.
+
 
 ---
 
@@ -272,6 +305,7 @@ an RFC (doc [rfc/](rfc/README.md)).
 | `E-ABI-040` | plugin ABI version mismatch |
 | `E-ABI-050` | type outside the plugin ABI subset |
 | `E-ABI-060` | layout change in a `#[stable]` struct |
+| `E-ABI-070` | a `#[derive(Binary)]` layout disagrees with its declared size |
 | `W-ABI-010` | `#[repr(packed)]` without a comment explaining why |
 
 ---

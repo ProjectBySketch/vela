@@ -310,7 +310,7 @@ impl Validate for AddToCart {
 | `web.storage` | `storage.local`, `storage.session`, typed get/set with a `Json` value |
 | `web.history` | driven by `routes` (doc 14 §4); `router.push`, `router.replace`, `router.back` |
 | `web.clipboard` | `clipboard.write(text:)`, `clipboard.read()` |
-| `web.worker` | `worker.start(comptime fn)` for a WASM worker |
+| `web.worker` | `worker.start(comptime fn)` for a WASM worker; `serviceWorker.register(...)` for the offline shell (`planned` behind `#![serviceWorker]`) |
 | `web.notify` | `notify.request()`, `notify.show(title:, body:)` |
 | `web.geo` | `geo.current() -> Result<Position, GeoError>` |
 | `web.dom` | the escape hatch: `dom.query(sel)`, `dom.setAttribute`, `dom.on` — available but `#![deny(web.dom)]` turns it into an error |
@@ -341,7 +341,21 @@ islands   = "auto"          # auto | all | none
   markup is a build-time error in `hybrid` mode (both are produced by the same
   code), not a runtime warning.
 * Streaming: `page ... @stream` sends the shell first and awaits `Suspense`
-  regions; `planned` beyond the shell.
+  regions. The rules:
+
+  | Rule | Detail |
+  | --- | --- |
+  | Shell first | the `<head>`, the layout and every region that does not suspend are flushed immediately |
+  | `Suspense(fallback:)` | marks a region that may be pending; its fallback is sent in the shell |
+  | Resolution order | each resolved region is sent as a chunk that replaces its fallback, in completion order |
+  | Errors | a region that fails sends an error boundary payload; the rest of the page is unaffected |
+  | Transport | chunked HTML by default; over HTTP/2 each chunk is one DATA frame (doc 23 §3) |
+  | Frames | the first chunk is under 14 KB so the first paint does not wait for a second round trip |
+  | Client | no JavaScript is required to render a streamed region; an island inside one hydrates when it arrives |
+  | Cancellation | a client disconnect cancels the pending regions (doc 10 §4) |
+
+  A prerendered route may not stream (`E-WEB-090`), because there is no response
+  to stream into; it renders the resolved page.
 
 ---
 
@@ -364,6 +378,10 @@ will optimise later" a decision someone has to make on purpose.
 ---
 
 ## 13. Deploying
+
+Deployment — containers, canaries, rollback, observability, secrets — is specified
+in [39-cloud.md](39-cloud.md). The web-specific part is only what artifact each
+target produces:
 
 | Host | Artifact |
 | --- | --- |

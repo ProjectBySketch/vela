@@ -7,6 +7,7 @@
 
 #include "vela_runtime.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -113,6 +114,8 @@ vela_value vela_str(const char *s) {
   return v;
 }
 
+static int values_equal(vela_value a, vela_value b);
+
 static const char *type_name(vela_value v) {
   switch (v.type) {
     case VELA_NIL: return "nil";
@@ -120,6 +123,7 @@ static const char *type_name(vela_value v) {
     case VELA_BOOL: return "bool";
     case VELA_STR: return "str";
     case VELA_LIST: return "list";
+    case VELA_MAP: return "map";
   }
   return "?";
 }
@@ -152,6 +156,7 @@ int vela_truthy(vela_value v) {
     case VELA_NUM: return v.as.num != 0;
     case VELA_STR: return v.as.str[0] != '\0';
     case VELA_LIST: return v.as.list->len > 0;
+    case VELA_MAP: return v.as.map->len > 0;
   }
   return 0;
 }
@@ -187,6 +192,16 @@ static void value_to_sb(StrBuf *b, vela_value v) {
         value_to_sb(b, v.as.list->items[i]);
       }
       sb_putc(b, ']');
+      break;
+    case VELA_MAP:
+      sb_putc(b, '{');
+      for (size_t i = 0; i < v.as.map->len; i++) {
+        if (i > 0) sb_puts(b, ", ");
+        value_to_sb(b, v.as.map->keys[i]);
+        sb_puts(b, ": ");
+        value_to_sb(b, v.as.map->vals[i]);
+      }
+      sb_putc(b, '}');
       break;
   }
 }
@@ -289,9 +304,120 @@ static int values_equal(vela_value a, vela_value b) {
       }
       return 1;
     }
+    case VELA_MAP: {
+      vela_map *ma = a.as.map;
+      vela_map *mb = b.as.map;
+      if (ma->len != mb->len) return 0;
+      for (size_t i = 0; i < ma->len; i++) {
+        int found = 0;
+        for (size_t j = 0; j < mb->len; j++) {
+          if (values_equal(ma->keys[i], mb->keys[j])) {
+            if (!values_equal(ma->vals[i], mb->vals[j])) return 0;
+            found = 1;
+            break;
+          }
+        }
+        if (!found) return 0;
+      }
+      return 1;
+    }
   }
   return 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* maps                                                                */
+/* ------------------------------------------------------------------ */
+
+static long map_find(vela_map *m, vela_value key) {
+  for (size_t i = 0; i < m->len; i++) {
+    if (values_equal(m->keys[i], key)) return (long)i;
+  }
+  return -1;
+}
+
+vela_map *vela_as_map(vela_value v, const char *what) {
+  if (v.type != VELA_MAP) {
+    vela_panic("%s expects a map, got %s", what, type_name(v));
+  }
+  return v.as.map;
+}
+
+vela_value vela_map_new(void) {
+  vela_map *m = (vela_map *)vela_alloc(sizeof(vela_map));
+  vela_value v;
+  v.type = VELA_MAP;
+  v.as.map = m;
+  return v;
+}
+
+vela_value vela_map_set(vela_value map, vela_value key, vela_value value) {
+  vela_map *m = vela_as_map(map, "map write");
+  long i = map_find(m, key);
+
+  if (i >= 0) {
+    m->vals[i] = value;
+    return map;
+  }
+  if (m->len == m->cap) {
+    size_t cap = m->cap ? m->cap * 2 : 8;
+    m->keys = (vela_value *)vela_realloc(m->keys, cap * sizeof(vela_value));
+    m->vals = (vela_value *)vela_realloc(m->vals, cap * sizeof(vela_value));
+    m->cap = cap;
+  }
+  m->keys[m->len] = key;
+  m->vals[m->len] = value;
+  m->len++;
+  return map;
+}
+
+vela_value vela_map_get(vela_value map, vela_value key) {
+  vela_map *m = vela_as_map(map, "map read");
+  long i = map_find(m, key);
+  return i >= 0 ? m->vals[i] : vela_nil();
+}
+
+int vela_map_has(vela_value map, vela_value key) {
+  vela_map *m = vela_as_map(map, "has()");
+  return map_find(m, key) >= 0;
+}
+
+vela_value vela_map_remove(vela_value map, vela_value key) {
+  vela_map *m = vela_as_map(map, "remove()");
+  long i = map_find(m, key);
+  if (i < 0) return map;
+  for (size_t j = (size_t)i; j + 1 < m->len; j++) {
+    m->keys[j] = m->keys[j + 1];
+    m->vals[j] = m->vals[j + 1];
+  }
+  m->len--;
+  return map;
+}
+
+static vela_value list_from_values(vela_value *items, size_t count) {
+  vela_list *l = (vela_list *)vela_alloc(sizeof(vela_list));
+  vela_value out;
+  l->len = count;
+  l->cap = count;
+  if (count > 0) {
+    l->items = (vela_value *)vela_alloc(count * sizeof(vela_value));
+    memcpy(l->items, items, count * sizeof(vela_value));
+  }
+  out.type = VELA_LIST;
+  out.as.list = l;
+  return out;
+}
+
+vela_value vela_map_keys(vela_value map) {
+  vela_map *m = vela_as_map(map, "keys()");
+  return list_from_values(m->keys, m->len);
+}
+
+vela_value vela_map_values(vela_value map) {
+  vela_map *m = vela_as_map(map, "values()");
+  return list_from_values(m->vals, m->len);
+}
+
 
 vela_value vela_eq(vela_value a, vela_value b) { return vela_bool(values_equal(a, b)); }
 vela_value vela_ne(vela_value a, vela_value b) { return vela_bool(!values_equal(a, b)); }
@@ -332,7 +458,8 @@ vela_value vela_println(vela_value v) {
 vela_value vela_builtin_len(vela_value v) {
   if (v.type == VELA_STR) return vela_num((double)strlen(v.as.str));
   if (v.type == VELA_LIST) return vela_num((double)v.as.list->len);
-  vela_panic("len() expects a string or a list, got %s", type_name(v));
+  if (v.type == VELA_MAP) return vela_num((double)v.as.map->len);
+  vela_panic("len() expects a string, a list or a map, got %s", type_name(v));
 }
 
 vela_value vela_builtin_push(vela_value list, vela_value item) {
@@ -371,6 +498,80 @@ vela_value vela_builtin_set(vela_value list, vela_value index, vela_value value)
   return list;
 }
 
+vela_value vela_index(vela_value container, vela_value index) {
+  switch (container.type) {
+    case VELA_LIST: {
+      vela_list *l = container.as.list;
+      return l->items[resolve_index(l, index, "[]")];
+    }
+    case VELA_MAP:
+      return vela_map_get(container, index);
+    case VELA_STR: {
+      const char *s = container.as.str;
+      size_t n = strlen(s);
+      double d = need_num(index, "[]");
+      long long i;
+
+      if (!(d >= -1e15 && d <= 1e15)) vela_panic("[] expects a whole-number index");
+      i = (long long)d;
+      if (i < 0) i += (long long)n;
+      if (i < 0 || i >= (long long)n) {
+        vela_panic("[]: index %lld is out of range for a string of %zu byte(s)", i, n);
+      }
+      {
+        char *one = (char *)vela_alloc(2);
+        one[0] = s[i];
+        one[1] = '\0';
+        return vela_str(one);
+      }
+    }
+    default:
+      vela_panic("cannot index a %s", type_name(container));
+  }
+  return vela_nil();
+}
+
+vela_value vela_set_index(vela_value container, vela_value index, vela_value value) {
+  switch (container.type) {
+    case VELA_LIST: {
+      vela_list *l = container.as.list;
+      l->items[resolve_index(l, index, "[] =")] = value;
+      return value;
+    }
+    case VELA_MAP:
+      vela_map_set(container, index, value);
+      return value;
+    default:
+      vela_panic("cannot assign into a %s", type_name(container));
+  }
+  return vela_nil();
+}
+
+vela_value vela_iter_list(vela_value v) {
+  if (v.type == VELA_LIST) return v;
+  if (v.type == VELA_MAP) return vela_map_keys(v);
+  if (v.type == VELA_STR) {
+    size_t n = strlen(v.as.str);
+    vela_list *l = (vela_list *)vela_alloc(sizeof(vela_list));
+    vela_value out;
+    l->len = n;
+    l->cap = n;
+    if (n > 0) {
+      l->items = (vela_value *)vela_alloc(n * sizeof(vela_value));
+      for (size_t i = 0; i < n; i++) {
+        char *one = (char *)vela_alloc(2);
+        one[0] = v.as.str[i];
+        one[1] = '\0';
+        l->items[i] = vela_str(one);
+      }
+    }
+    out.type = VELA_LIST;
+    out.as.list = l;
+    return out;
+  }
+  vela_panic("for loop expects a list, a map or a string, got %s", type_name(v));
+}
+
 vela_value vela_builtin_str(vela_value v) { return vela_str(vela_to_cstr(v)); }
 
 vela_value vela_builtin_num(vela_value v) {
@@ -388,6 +589,7 @@ vela_value vela_builtin_num(vela_value v) {
       return vela_num(d);
     }
     case VELA_LIST:
+    case VELA_MAP:
       break;
   }
   vela_panic("cannot convert %s to a number", type_name(v));
@@ -434,4 +636,211 @@ vela_value vela_builtin_range(vela_value v) {
   out.type = VELA_LIST;
   out.as.list = l;
   return out;
+}
+
+
+/* ---------------------------------------------------------------- */
+/* strings and maps: string helpers                                  */
+/* ---------------------------------------------------------------- */
+
+static char *str_copy_range(const char *s, size_t n) {
+  char *out = (char *)vela_alloc(n + 1);
+  if (n > 0) memcpy(out, s, n);
+  out[n] = '\0';
+  return out;
+}
+
+static void list_push_value(vela_list *list, vela_value v) {
+  if (list->len == list->cap) {
+    size_t cap = list->cap ? list->cap * 2 : 4;
+    list->items = (vela_value *)vela_realloc(list->items, cap * sizeof(vela_value));
+    list->cap = cap;
+  }
+  list->items[list->len++] = v;
+}
+
+static vela_value new_list_value(void) {
+  vela_list *l = (vela_list *)vela_alloc(sizeof(vela_list));
+  vela_value v;
+  v.type = VELA_LIST;
+  v.as.list = l;
+  return v;
+}
+
+vela_value vela_builtin_split(vela_value s, vela_value sep) {
+  const char *text = need_str(s, "split()");
+  const char *by = need_str(sep, "split()");
+  size_t by_len = strlen(by);
+  vela_value out = new_list_value();
+  vela_list *l = out.as.list;
+
+  if (by_len == 0) {
+    size_t n = strlen(text);
+    for (size_t i = 0; i < n; i++) {
+      list_push_value(l, vela_str(str_copy_range(text + i, 1)));
+    }
+    return out;
+  }
+
+  {
+    const char *cur = text;
+    for (;;) {
+      const char *hit = strstr(cur, by);
+      size_t n = hit ? (size_t)(hit - cur) : strlen(cur);
+      list_push_value(l, vela_str(str_copy_range(cur, n)));
+      if (hit == NULL) break;
+      cur = hit + by_len;
+    }
+  }
+  return out;
+}
+
+vela_value vela_builtin_join(vela_value list, vela_value sep) {
+  vela_list *l = vela_as_list(list, "join()");
+  const char *by = need_str(sep, "join()");
+  size_t by_len = strlen(by);
+  size_t total = 0;
+  char *out;
+  size_t at = 0;
+
+  for (size_t i = 0; i < l->len; i++) {
+    total += strlen(vela_to_cstr(l->items[i]));
+    if (i + 1 < l->len) total += by_len;
+  }
+
+  out = (char *)vela_alloc(total + 1);
+  for (size_t i = 0; i < l->len; i++) {
+    const char *piece = vela_to_cstr(l->items[i]);
+    size_t n = strlen(piece);
+    memcpy(out + at, piece, n);
+    at += n;
+    if (i + 1 < l->len) {
+      memcpy(out + at, by, by_len);
+      at += by_len;
+    }
+  }
+  out[at] = '\0';
+  return vela_str(out);
+}
+
+vela_value vela_builtin_upper(vela_value s) {
+  const char *text = need_str(s, "upper()");
+  size_t n = strlen(text);
+  char *out = (char *)vela_alloc(n + 1);
+  for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
+  out[n] = '\0';
+  return vela_str(out);
+}
+
+vela_value vela_builtin_lower(vela_value s) {
+  const char *text = need_str(s, "lower()");
+  size_t n = strlen(text);
+  char *out = (char *)vela_alloc(n + 1);
+  for (size_t i = 0; i < n; i++) out[i] = (char)tolower((unsigned char)text[i]);
+  out[n] = '\0';
+  return vela_str(out);
+}
+
+vela_value vela_builtin_trim(vela_value s) {
+  const char *text = need_str(s, "trim()");
+  size_t n = strlen(text);
+  size_t start = 0;
+  size_t end = n;
+
+  while (start < end && isspace((unsigned char)text[start])) start++;
+  while (end > start && isspace((unsigned char)text[end - 1])) end--;
+  return vela_str(str_copy_range(text + start, end - start));
+}
+
+vela_value vela_builtin_contains(vela_value haystack, vela_value needle) {
+  if (haystack.type == VELA_STR) {
+    return vela_bool(strstr(haystack.as.str, need_str(needle, "contains()")) != NULL);
+  }
+  if (haystack.type == VELA_LIST) {
+    vela_list *l = haystack.as.list;
+    for (size_t i = 0; i < l->len; i++) {
+      if (values_equal(l->items[i], needle)) return vela_bool(1);
+    }
+    return vela_bool(0);
+  }
+  vela_panic("contains() expects a string or a list, got %s", type_name(haystack));
+}
+
+vela_value vela_builtin_replace(vela_value s, vela_value from, vela_value to) {
+  const char *text = need_str(s, "replace()");
+  const char *needle = need_str(from, "replace()");
+  const char *with = need_str(to, "replace()");
+  size_t needle_len = strlen(needle);
+  size_t with_len = strlen(with);
+  size_t cap = strlen(text) + 1;
+  size_t at = 0;
+  char *out;
+  const char *cur = text;
+
+  if (needle_len == 0) return vela_str(str_copy_range(text, strlen(text)));
+
+  for (;;) {
+    const char *hit = strstr(cur, needle);
+    if (hit == NULL) break;
+    cap += with_len;
+    cur = hit + needle_len;
+  }
+
+  out = (char *)vela_alloc(cap);
+  cur = text;
+  for (;;) {
+    const char *hit = strstr(cur, needle);
+    size_t piece = hit ? (size_t)(hit - cur) : strlen(cur);
+    memcpy(out + at, cur, piece);
+    at += piece;
+    if (hit == NULL) break;
+    memcpy(out + at, with, with_len);
+    at += with_len;
+    cur = hit + needle_len;
+  }
+  out[at] = '\0';
+  return vela_str(out);
+}
+
+vela_value vela_builtin_starts_with(vela_value s, vela_value prefix) {
+  const char *text = need_str(s, "startsWith()");
+  const char *pre = need_str(prefix, "startsWith()");
+  size_t n = strlen(pre);
+  return vela_bool(strncmp(text, pre, n) == 0);
+}
+
+vela_value vela_builtin_ends_with(vela_value s, vela_value suffix) {
+  const char *text = need_str(s, "endsWith()");
+  const char *suf = need_str(suffix, "endsWith()");
+  size_t n = strlen(text);
+  size_t m = strlen(suf);
+  if (m > n) return vela_bool(0);
+  return vela_bool(strcmp(text + (n - m), suf) == 0);
+}
+
+vela_value vela_builtin_index_of(vela_value haystack, vela_value needle) {
+  if (haystack.type == VELA_STR) {
+    const char *hit = strstr(haystack.as.str, need_str(needle, "indexOf()"));
+    return vela_num(hit == NULL ? -1 : (double)(hit - haystack.as.str));
+  }
+  if (haystack.type == VELA_LIST) {
+    vela_list *l = haystack.as.list;
+    for (size_t i = 0; i < l->len; i++) {
+      if (values_equal(l->items[i], needle)) return vela_num((double)i);
+    }
+    return vela_num(-1);
+  }
+  vela_panic("indexOf() expects a string or a list, got %s", type_name(haystack));
+}
+
+vela_value vela_builtin_keys(vela_value map) { return vela_map_keys(map); }
+
+vela_value vela_builtin_values(vela_value map) { return vela_map_values(map); }
+
+vela_value vela_builtin_has(vela_value map, vela_value key) {
+  return vela_bool(vela_map_has(map, key));
+}
+
+vela_value vela_builtin_remove(vela_value map, vela_value key) {
+  return vela_map_remove(map, key);
 }

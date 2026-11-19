@@ -1,0 +1,21 @@
+let s = " Hello, World "println(trim(s))
+println(upper(trim(s)))
+println(lower("ABC"))
+println(split("a,b,c", ","))
+println(join(["x", "y", "z"], "-"))
+println(contains("hello", "ell"))
+println(contains([1, 2, 3], 2))
+println(replace("a-b-c", "-", "+"))
+println(startsWith("hello", "he"))
+println(endsWith("hello", "lo"))
+println(indexOf("hello", "ll"))
+println(indexOf([10, 20, 30], 30))
+
+let xs = [10, 20, 30]
+println(xs[0])
+println(xs[-1])
+println("hey"[1])
+
+mut ys = [1, 2, 3]
+ys[1] = 20
+println(ys)

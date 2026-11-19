@@ -13,7 +13,7 @@ table disagree, this table is right and the document has a bug.
 
 ---
 
-## 1. What `velac` 0.1 actually accepts
+## 1. What `velac` 0.2 actually accepts
 
 The complete implemented language, exhaustively:
 
@@ -28,6 +28,8 @@ stmt        := letStmt | mutStmt | assign | ifStmt | whileStmt | forStmt
 letStmt     := "let" IDENT "=" expr
 mutStmt     := "mut" IDENT "=" expr
 assign      := IDENT ("=" | "+=" | "-=" | "*=" | "/=") expr
+             | IDENT "[" expr "]" "=" expr
+             | IDENT "." IDENT "=" expr
 ifStmt      := "if" expr block ("else" (ifStmt | block))?
 whileStmt   := "while" expr block
 forStmt     := "for" IDENT "in" expr block
@@ -37,12 +39,18 @@ continueStmt:= "continue"
 exprStmt    := expr
 ```
 
-Expressions: `nil`, numbers (f64 only), booleans, strings, lists, identifiers,
-calls, `+ - * / %`, `== != < <= > >=`, `&& || !`, grouping. Function values exist
-internally but cannot be stored or called from a variable.
+Expressions: `nil`, numbers (f64 only), booleans, strings (with `${expr}`
+interpolation), lists, maps, identifiers, calls, `+ - * / %`, `== != < <= > >=`,
+`&& || !`, grouping, indexing `a[i]` and field access `a.b`.
 
-Builtins: `print println len push at set str num type abs sqrt floor ceil range
-assert error`.
+Map literals are `{name: value, "key": value}` in expression position. Indexing
+reads a list, a string (one byte) or a map; writing needs a `mut` binding.
+`for` iterates lists, map keys and strings; `range(n)` builds a list. Function
+values exist internally but cannot be stored or called from a variable.
+
+Builtins (30): `print println len push at set str num type abs sqrt floor ceil
+range assert error split join upper lower trim contains replace startsWith
+endsWith indexOf keys values has remove`.
 
 Everything below is not implemented.
 
@@ -62,7 +70,7 @@ Everything below is not implemented.
 | Integer literals `0x`, `0o`, `0b`, `_` separators | `spec` |
 | Sized integer literals and suffixes (`1u8`, `1i64`, `1usize`) | `spec` |
 | Float literals with exponent, `f32` suffix | `spec` |
-| String interpolation `"${expr}"` | `spec` |
+| String interpolation `"${expr}"` | `impl` |
 | Multi-line `"""` and raw `r"..."` strings | `spec` |
 | `Char` literal `'a'` | `spec` |
 | Unicode identifiers (XID) | `spec` |
@@ -673,10 +681,10 @@ This is the replacement for SwiftUI, UIKit, HTML and CSS.
 
 ## 3. The gap, in one paragraph
 
-The compiler today is a 1,700-line single-pass lowering to C, and it implements
-the subset in §1: 14 keywords, 6 value types, 15 builtins, no types, no
-closures, no structs, no modules, no borrow or ownership checking, no memory
-management, no UI and no web. This specification describes a language roughly
+The compiler today is a ~2,000-line single-pass lowering to C, and it implements
+the subset in §1: 14 keywords, 7 value types (including maps), 30 builtins, no
+static types, no closures, no structs, no modules, no borrow or ownership
+checking, no memory management, no UI and no web. This specification describes a language roughly
 one hundred times that size in surface area: 60 reserved keywords, 24 types, 48
 operators, 70+ standard library modules, 18 declaration forms, 214 style
 properties and four profiles. Doc 35 records the 23 areas that were gaps in the

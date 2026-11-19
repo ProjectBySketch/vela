@@ -1,0 +1,24 @@
+# Records: maps are the language's record type.
+
+let alice = {name: "Alice", role: "engineer", active: true}
+let bob = {name: "Bob", role: "designer", active: false}
+
+let people = [alice, bob]
+
+for p in people {
+  mut status = "away"
+  if p.active {
+    status = "here"
+  }
+  println("${p.name} (${p.role}) is ${status}")
+}
+
+mut byRole = {}
+for p in people {
+  byRole[p.role] = p.name
+}
+println(byRole)
+
+for role in byRole {
+  println("${role} -> ${byRole[role]}")
+}

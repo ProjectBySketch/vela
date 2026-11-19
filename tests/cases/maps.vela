@@ -1,0 +1,28 @@
+mut person = {name: "Ada", age: 36}
+println(person["name"])
+println(person.age)
+println(len(person))
+println(keys(person))
+println(has(person, "name"))
+println(has(person, "missing"))
+
+mut p = person
+p["city"] = "London"
+p.city = "Paris"
+println(p.city)
+remove(p, "city")
+println(keys(p))
+
+mut counts = {}
+for w in ["a", "b", "a"] {
+  if has(counts, w) {
+    counts[w] = counts[w] + 1
+  } else {
+    counts[w] = 1
+  }
+}
+println(counts)
+println(counts["a"])
+for k in counts {
+  println(k)
+}

@@ -1,0 +1,7 @@
+let name = "world"
+let n = 3
+println("hello ${name}")
+println("n = ${n}, twice = ${n * 2}")
+println("nested ${upper("abc")}")
+println("sum ${1 + 2}${3 + 4}")
+println("brace ${has({a: 1}, "a")}")

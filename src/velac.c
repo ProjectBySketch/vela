@@ -163,6 +163,8 @@ typedef enum {
   TK_LBRACKET,
   TK_RBRACKET,
   TK_COMMA,
+  TK_COLON,
+  TK_DOT,
 
   TK_PLUS,
   TK_MINUS,
@@ -318,6 +320,41 @@ static void lex(const char *src, const char *path, TokenList *out) {
       i++;
       while (i < n && src[i] != '"') {
         char ch = src[i];
+        if (ch == '$' && i + 1 < n && src[i + 1] == '{') {
+          int depth = 1;
+          buf_putc(&sb, '$');
+          buf_putc(&sb, '{');
+          i += 2;
+          while (i < n && depth > 0) {
+            char inner = src[i];
+            if (inner == '"') {
+              buf_putc(&sb, inner);
+              i++;
+              while (i < n && src[i] != '"') {
+                if (src[i] == '\\' && i + 1 < n) {
+                  buf_putc(&sb, src[i]);
+                  i++;
+                }
+                if (src[i] == '\n') line++;
+                buf_putc(&sb, src[i]);
+                i++;
+              }
+              if (i < n) {
+                buf_putc(&sb, src[i]);
+                i++;
+              }
+              continue;
+            }
+            if (inner == '{') depth++;
+            else if (inner == '}') depth--;
+            if (inner == '\n') line++;
+            buf_putc(&sb, inner);
+            i++;
+            if (depth == 0) break;
+          }
+          if (depth != 0) fail_at(path, line, "unterminated interpolation: missing '}'");
+          continue;
+        }
         if (ch == '\\' && i + 1 < n) {
           char e = src[i + 1];
           i += 2;
@@ -362,6 +399,8 @@ static void lex(const char *src, const char *path, TokenList *out) {
         case '[': t.type = TK_LBRACKET; break;
         case ']': t.type = TK_RBRACKET; break;
         case ',': t.type = TK_COMMA; break;
+        case ':': t.type = TK_COLON; break;
+        case '.': t.type = TK_DOT; break;
         case '%': t.type = TK_PERCENT; break;
         case '+':
           if (d == '=') { t.type = TK_PLUS_EQ; adv = 2; } else { t.type = TK_PLUS; }
@@ -461,6 +500,20 @@ static const Builtin builtins[] = {
     {"assert", "vela_builtin_assert", 1},
     {"error", "vela_builtin_error", 1},
     {"range", "vela_builtin_range", 1},
+    {"split", "vela_builtin_split", 2},
+    {"join", "vela_builtin_join", 2},
+    {"upper", "vela_builtin_upper", 1},
+    {"lower", "vela_builtin_lower", 1},
+    {"trim", "vela_builtin_trim", 1},
+    {"contains", "vela_builtin_contains", 2},
+    {"replace", "vela_builtin_replace", 3},
+    {"startsWith", "vela_builtin_starts_with", 2},
+    {"endsWith", "vela_builtin_ends_with", 2},
+    {"indexOf", "vela_builtin_index_of", 2},
+    {"keys", "vela_builtin_keys", 1},
+    {"values", "vela_builtin_values", 1},
+    {"has", "vela_builtin_has", 2},
+    {"remove", "vela_builtin_remove", 2},
 };
 
 static const Builtin *builtin_find(const char *name) {
@@ -688,6 +741,29 @@ static void emit_c_string(Parser *p, const char *s) {
   buf_putc(p->out, '"');
 }
 
+/* C string escaping into a plain buffer (used by map literals and interpolation). */
+static void buf_escape_c(Buf *b, const char *s, size_t n) {
+  buf_putc(b, '"');
+  for (size_t i = 0; i < n; i++) {
+    unsigned char c = (unsigned char)s[i];
+    switch (c) {
+      case '"': buf_puts(b, "\\\""); break;
+      case '\\': buf_puts(b, "\\\\"); break;
+      case '\n': buf_puts(b, "\\n"); break;
+      case '\t': buf_puts(b, "\\t"); break;
+      case '\r': buf_puts(b, "\\r"); break;
+      default:
+        if (c < 32 || c == 127) {
+          buf_printf(b, "\\%03o", (unsigned)c);
+        } else {
+          buf_putc(b, (char)c);
+        }
+        break;
+    }
+  }
+  buf_putc(b, '"');
+}
+
 /* Generate an expression into a side buffer so it can be wrapped. */
 typedef struct {
   Buf *saved;
@@ -721,7 +797,9 @@ static void gen_comparison(Parser *p);
 static void gen_term(Parser *p);
 static void gen_factor(Parser *p);
 static void gen_unary(Parser *p);
-static void gen_call(Parser *p);
+static void gen_postfix(Parser *p);
+static void gen_base_call(Parser *p);
+static void gen_interp_string(Parser *p, Token *t);
 static void gen_primary(Parser *p);
 static void gen_stmt(Parser *p);
 static void gen_block(Parser *p, int add_return);
@@ -872,7 +950,82 @@ static int is_assign_op(TokType t) {
          t == TK_SLASH_EQ;
 }
 
+/* Given the index of a '[', return the index just past its matching ']'. */
+static int token_index_after_bracket(Parser *p, size_t start) {
+  int depth = 0;
+  for (size_t i = start; i < p->count; i++) {
+    if (p->toks[i].type == TK_LBRACKET) depth++;
+    else if (p->toks[i].type == TK_RBRACKET) {
+      depth--;
+      if (depth == 0) return (int)(i + 1);
+    } else if (p->toks[i].type == TK_EOF) return -1;
+  }
+  return -1;
+}
+
 static void gen_assign(Parser *p) {
+  if (check(p, TK_IDENT)) {
+    TokType next = pk(p, 1)->type;
+
+    /* x[key] = value */
+    if (next == TK_LBRACKET) {
+      int after = token_index_after_bracket(p, p->pos + 1);
+      if (after > 0 && (size_t)after < p->count && is_assign_op(p->toks[after].type)) {
+        Token *name_tok = curp(p);
+        char *name = token_text(name_tok);
+        Var *v = scope_find(p, name);
+        if (v == NULL) perr(p, name_tok, "undefined variable '%s'", name);
+        free(name);
+        if (!v->is_mut) {
+          perr(p, name_tok, "cannot assign into '%s': declare it with 'mut'", v->name);
+        }
+        if (p->toks[after].type != TK_ASSIGN) {
+          perr(p, &p->toks[after],
+               "compound assignment on an element is not supported; write 'x[i] = ...'");
+        }
+        advance_tok(p); /* name */
+        advance_tok(p); /* [ */
+        emitf(p, "vela_set_index(%s, (", v->cname);
+        gen_expr(p);
+        expect_tok(p, TK_RBRACKET, "']'");
+        emit(p, "), (");
+        advance_tok(p); /* = */
+        gen_assign(p);
+        emit(p, "))");
+        return;
+      }
+    }
+
+    /* x.field = value */
+    if (next == TK_DOT && pk(p, 2)->type == TK_IDENT && is_assign_op(pk(p, 3)->type)) {
+      Token *name_tok = curp(p);
+      char *name = token_text(name_tok);
+      Var *v = scope_find(p, name);
+      char *field_name;
+      if (v == NULL) perr(p, name_tok, "undefined variable '%s'", name);
+      free(name);
+      if (!v->is_mut) {
+        perr(p, name_tok, "cannot assign a field of '%s': declare it with 'mut'", v->name);
+      }
+      if (pk(p, 3)->type != TK_ASSIGN) {
+        perr(p, pk(p, 3),
+             "compound assignment on a field is not supported; write 'x.f = ...'");
+      }
+      field_name = token_text(pk(p, 2));
+      advance_tok(p); /* name */
+      advance_tok(p); /* . */
+      advance_tok(p); /* field */
+      advance_tok(p); /* = */
+      emitf(p, "vela_set_index(%s, vela_str(", v->cname);
+      emit_c_string(p, field_name);
+      emit(p, "), (");
+      gen_assign(p);
+      emit(p, "))");
+      free(field_name);
+      return;
+    }
+  }
+
   if (check(p, TK_IDENT) && is_assign_op(pk(p, 1)->type)) {
     Token *name_tok = curp(p);
     char *name = token_text(name_tok);
@@ -927,7 +1080,7 @@ static void gen_unary(Parser *p) {
     emit(p, "))");
     return;
   }
-  gen_call(p);
+  gen_postfix(p);
 }
 
 static void gen_primary(Parser *p) {
@@ -938,10 +1091,15 @@ static void gen_primary(Parser *p) {
       advance_tok(p);
       break;
     case TK_STRING:
-      emit(p, "vela_str(");
-      emit_c_string(p, t->str);
-      emit(p, ")");
-      advance_tok(p);
+      if (strstr(t->str, "${") != NULL) {
+        gen_interp_string(p, t);
+        advance_tok(p);
+      } else {
+        emit(p, "vela_str(");
+        emit_c_string(p, t->str);
+        emit(p, ")");
+        advance_tok(p);
+      }
       break;
     case TK_TRUE:
       emit(p, "vela_bool(1)");
@@ -991,6 +1149,66 @@ static void gen_primary(Parser *p) {
       free(items.data);
       break;
     }
+    case TK_LBRACE: {
+      Capture outer;
+      cap_begin(p, &outer);
+      emit(p, "vela_map_new()");
+      advance_tok(p);
+      if (!check(p, TK_RBRACE)) {
+        for (;;) {
+          Buf key = {0};
+
+          if (check(p, TK_IDENT)) {
+            char *name = token_text(curp(p));
+            buf_puts(&key, "vela_str(");
+            buf_escape_c(&key, name, strlen(name));
+            buf_putc(&key, ')');
+            free(name);
+            advance_tok(p);
+          } else if (check(p, TK_STRING)) {
+            Token *s = curp(p);
+            buf_puts(&key, "vela_str(");
+            buf_escape_c(&key, s->str, strlen(s->str));
+            buf_putc(&key, ')');
+            advance_tok(p);
+          } else {
+            perr(p, curp(p), "a map key must be a name or a string");
+          }
+
+          expect_tok(p, TK_COLON, "':'");
+
+          {
+            Capture val;
+            Buf comb = {0};
+            cap_begin(p, &val);
+            gen_expr(p);
+            cap_end(p, &val);
+
+            buf_puts(&comb, "vela_map_set((");
+            buf_puts(&comb, outer.tmp.data ? outer.tmp.data : "vela_nil()");
+            buf_puts(&comb, "), (");
+            buf_puts(&comb, key.data ? key.data : "vela_nil()");
+            buf_puts(&comb, "), (");
+            buf_puts(&comb, val.tmp.data ? val.tmp.data : "vela_nil()");
+            buf_puts(&comb, "))");
+
+            free(outer.tmp.data);
+            free(val.tmp.data);
+            free(key.data);
+            outer.tmp = comb;
+          }
+
+          if (!match(p, TK_COMMA)) break;
+          if (check(p, TK_RBRACE)) break;
+        }
+      }
+      expect_tok(p, TK_RBRACE, "'}'");
+      cap_end(p, &outer);
+      pre(p);
+      buf_puts(p->out, outer.tmp.data ? outer.tmp.data : "vela_nil()");
+      free(outer.tmp.data);
+      break;
+    }
     case TK_IDENT: {
       char *name = token_text(t);
       Var *v = scope_find(p, name);
@@ -1005,7 +1223,7 @@ static void gen_primary(Parser *p) {
   }
 }
 
-static void gen_call(Parser *p) {
+static void gen_base_call(Parser *p) {
   if (check(p, TK_IDENT) && pk(p, 1)->type == TK_LPAREN) {
     Token *name_tok = curp(p);
     char *name = token_text(name_tok);
@@ -1054,6 +1272,185 @@ static void gen_call(Parser *p) {
   }
 
   gen_primary(p);
+}
+
+/* Indexing and field access: a.b, a[k], a.b[k]... */
+static void gen_postfix(Parser *p) {
+  Capture c;
+  cap_begin(p, &c);
+  gen_base_call(p);
+
+  for (;;) {
+    if (check(p, TK_LBRACKET)) {
+      Capture idx;
+      Buf comb = {0};
+      advance_tok(p);
+      cap_begin(p, &idx);
+      gen_expr(p);
+      cap_end(p, &idx);
+      expect_tok(p, TK_RBRACKET, "']'");
+
+      buf_puts(&comb, "vela_index((");
+      buf_puts(&comb, c.tmp.data ? c.tmp.data : "vela_nil()");
+      buf_puts(&comb, "), (");
+      buf_puts(&comb, idx.tmp.data ? idx.tmp.data : "vela_nil()");
+      buf_puts(&comb, "))");
+
+      free(idx.tmp.data);
+      free(c.tmp.data);
+      c.tmp = comb;
+    } else if (check(p, TK_DOT)) {
+      Token *name;
+      char *field;
+      Buf comb = {0};
+
+      advance_tok(p);
+      name = expect_tok(p, TK_IDENT, "a field name after '.'");
+      field = token_text(name);
+
+      buf_puts(&comb, "vela_index((");
+      buf_puts(&comb, c.tmp.data ? c.tmp.data : "vela_nil()");
+      buf_puts(&comb, "), vela_str(");
+      buf_escape_c(&comb, field, strlen(field));
+      buf_puts(&comb, "))");
+
+      free(field);
+      free(c.tmp.data);
+      c.tmp = comb;
+    } else {
+      break;
+    }
+  }
+
+  cap_end(p, &c);
+  pre(p);
+  buf_puts(p->out, c.tmp.data ? c.tmp.data : "vela_nil()");
+  free(c.tmp.data);
+}
+
+/* ---------------------------------------------------------------- */
+/* string interpolation                                              */
+/* ---------------------------------------------------------------- */
+
+static void append_expr_part(Buf *acc, int *have, const char *text) {
+  if (!*have) {
+    buf_puts(acc, text);
+    *have = 1;
+    return;
+  }
+  {
+    Buf comb = {0};
+    buf_puts(&comb, "vela_add((");
+    buf_puts(&comb, acc->data ? acc->data : "vela_str(\"\")");
+    buf_puts(&comb, "), (");
+    buf_puts(&comb, text);
+    buf_puts(&comb, "))");
+    free(acc->data);
+    *acc = comb;
+  }
+}
+
+static void emit_sub_expr(Parser *p, const char *src, size_t len, Buf *out) {
+  TokenList tl = {0};
+  char *copy = (char *)xrealloc(NULL, len + 1);
+  Parser sub;
+
+  memcpy(copy, src, len);
+  copy[len] = '\0';
+  lex(copy, p->path, &tl);
+
+  sub = *p;
+  sub.toks = tl.items;
+  sub.count = tl.count;
+  sub.pos = 0;
+  sub.out = out;
+  sub.indent = 0;
+  sub.line_start = 0;
+  sub.loop_depth = 0;
+
+  gen_expr(&sub);
+  if (sub.toks[sub.pos].type != TK_EOF) {
+    fail_at(p->path, sub.toks[sub.pos].line, "unexpected token in interpolation");
+  }
+  p->tmp = sub.tmp;
+}
+
+static void gen_interp_string(Parser *p, Token *t) {
+  const char *s = t->str;
+  size_t n = strlen(s);
+  size_t i = 0;
+  Buf acc = {0};
+  Buf lit = {0};
+  int have = 0;
+
+  while (i < n) {
+    if (s[i] == '$' && i + 1 < n && s[i + 1] == '{') {
+      if (lit.len > 0 || !have) {
+        Buf part = {0};
+        buf_puts(&part, "vela_str(");
+        buf_escape_c(&part, lit.data ? lit.data : "", lit.len);
+        buf_putc(&part, ')');
+        append_expr_part(&acc, &have, part.data);
+        free(part.data);
+        lit.len = 0;
+        if (lit.data != NULL) lit.data[0] = '\0';
+      }
+      {
+        size_t j = i + 2;
+        int depth = 1;
+        Buf part = {0};
+        Buf wrapped = {0};
+
+        while (j < n) {
+          if (s[j] == '"') {
+            j++;
+            while (j < n && s[j] != '"') {
+              if (s[j] == '\\' && j + 1 < n) j++;
+              j++;
+            }
+            if (j < n) j++;
+            continue;
+          }
+          if (s[j] == '{') depth++;
+          else if (s[j] == '}') {
+            depth--;
+            if (depth == 0) break;
+          }
+          j++;
+        }
+        if (j >= n) perr(p, t, "unterminated interpolation: missing '}'");
+
+        emit_sub_expr(p, s + i + 2, j - (i + 2), &part);
+        if (part.len == 0) perr(p, t, "empty interpolation '${}'");
+
+        buf_putc(&wrapped, '(');
+        buf_puts(&wrapped, part.data);
+        buf_putc(&wrapped, ')');
+        append_expr_part(&acc, &have, wrapped.data);
+
+        free(part.data);
+        free(wrapped.data);
+        i = j + 1;
+      }
+    } else {
+      buf_putc(&lit, s[i]);
+      i++;
+    }
+  }
+
+  if (lit.len > 0 || !have) {
+    Buf part = {0};
+    buf_puts(&part, "vela_str(");
+    buf_escape_c(&part, lit.data ? lit.data : "", lit.len);
+    buf_putc(&part, ')');
+    append_expr_part(&acc, &have, part.data);
+    free(part.data);
+  }
+
+  pre(p);
+  buf_puts(p->out, acc.data ? acc.data : "vela_str(\"\")");
+  free(acc.data);
+  free(lit.data);
 }
 
 
@@ -1156,7 +1553,8 @@ static void gen_for(Parser *p) {
   expect_tok(p, TK_LBRACE, "'{'");
   emit(p, ";");
   nl(p);
-  emitf(p, "vela_list *vela_lst_%d = vela_as_list(vela_it_%d, \"for loop\");", id, id);
+  emitf(p, "vela_list *vela_lst_%d = vela_as_list(vela_iter_list(vela_it_%d), \"for loop\");",
+        id, id);
   nl(p);
   emitf(p, "for (size_t vela_i_%d = 0; vela_i_%d < vela_lst_%d->len; vela_i_%d += 1) {",
         id, id, id, id);

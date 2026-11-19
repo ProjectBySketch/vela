@@ -248,12 +248,12 @@ claimed:
 | --- | --- | --- |
 | Documents | 0 | 45 |
 | Keywords | 14 | 60 reserved + 18 contextual |
-| Value types | 6 | 24 primitive and composite |
+| Value types | 7 | 24 primitive and composite |
 | Operators | 17 | 48 |
 | Statement forms | 8 | 19 |
 | Declaration forms | 3 | 18 |
 | Stdlib modules | 0 | 75+ |
-| Standard library items | 15 builtins | 1,100+ |
+| Standard library items | 30 builtins | 1,100+ |
 | Style properties (replacing CSS) | 0 | 214 |
 | Attributes | 0 | 59 |
 | Specified diagnostic codes | 0 | 300+ |

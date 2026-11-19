@@ -1,0 +1,300 @@
+# spec example — a kernel. Not compiled by CI. Requires tier D (sys profile).
+#
+# An x86_64 freestanding program: a serial console, a VGA text console, the PIT
+# timer, a keyboard interrupt handler, a bump allocator and a panic handler.
+# It uses only what docs 15, 16 and 18 define.
+
+use sys::{port, cpu, interrupts}
+
+# ---------------------------------------------------------------- registers
+
+#[repr(C)]
+mmio Uart16550 @ 0x3F8 {
+  data: UInt8 @ 0x00
+  ier:  UInt8 @ 0x01
+  lcr:  UInt8 @ 0x03
+  mcr:  UInt8 @ 0x04
+  lsr:  UInt8 @ 0x05
+}
+
+#[repr(C)]
+mmio Pic8259 @ 0x20 {
+  cmd:  UInt8 @ 0x00
+  data: UInt8 @ 0x01
+}
+
+#[repr(C)]
+mmio Pit8254 @ 0x40 {
+  channel0: UInt8 @ 0x00
+  command:  UInt8 @ 0x03
+}
+
+#[repr(C)]
+struct InterruptFrame {
+  rip: UInt64
+  cs: UInt64
+  rflags: UInt64
+  rsp: UInt64
+  ss: UInt64
+}
+
+const VGA_TEXT = 0xB8000
+const VGA_COLS = 80
+const VGA_ROWS = 25
+
+# ---------------------------------------------------------------- console
+
+mod console {
+  mut col: Int = 0
+  mut row: Int = 0
+
+  fn cell(index: IntSize) -> Ptr<UInt16> {
+    unsafe { Ptr<UInt16>.fromAddr(VGA_TEXT).add(index) }
+  }
+
+  pub fn clear() {
+    for i in 0..<(VGA_COLS * VGA_ROWS) {
+      unsafe { cell(i).write(0x0F20 as UInt16) }
+    }
+    col = 0
+    row = 0
+  }
+
+  fn advance() {
+    col += 1
+    if col >= VGA_COLS {
+      col = 0
+      row += 1
+      if row >= VGA_ROWS { row = VGA_ROWS - 1 }
+    }
+  }
+
+  pub fn putc(ch: Char) {
+    if ch == '\n' {
+      col = 0
+      row += 1
+      if row >= VGA_ROWS { row = VGA_ROWS - 1 }
+    } else {
+      unsafe { cell(row * VGA_COLS + col).write((0x0F00 | ch.toInt()) as UInt16) }
+      advance()
+    }
+    uart.putc(ch)
+  }
+
+  pub fn puts(text: Str) {
+    for ch in text { putc(ch) }
+  }
+
+  pub fn putInt(value: Int) {
+    if value == 0 { putc('0'); return }
+    mut v = value
+    if v < 0 { putc('-'); v = -v }
+
+    mut digits: [UInt8; 20] = [0; 20]
+    mut n = 0
+    while v > 0 {
+      digits[n] = (v % 10) as UInt8
+      v = v / 10
+      n += 1
+    }
+    while n > 0 {
+      n -= 1
+      match Char.fromInt((digits[n] as Int) + 48) {
+        Some(c) => putc(c),
+        nil     => {},
+      }
+    }
+  }
+
+  pub fn putHex(value: UInt64) {
+    let symbols = "0123456789abcdef"
+    puts("0x")
+    mut shift = 60
+    loop {
+      let nibble = ((value >> shift) & 0xF) as Int
+      puts(symbols[nibble])
+      if shift == 0 { break }
+      shift -= 4
+    }
+  }
+}
+
+# ---------------------------------------------------------------- serial
+
+mod uart {
+  mut ready: Bool = false
+
+  pub fn init(baud: UInt16) {
+    Uart16550.ier.write(0)
+    Uart16550.lcr.write(0x80)                        # divisor latch on
+    let divisor = 115200 / (baud as Int)
+    Uart16550.data.write((divisor & 0xFF) as UInt8)
+    Uart16550.ier.write(((divisor >> 8) & 0xFF) as UInt8)
+    Uart16550.lcr.write(0x03)                        # 8N1
+    Uart16550.mcr.write(0x03)
+    ready = true
+  }
+
+  pub fn putc(ch: Char) {
+    if not ready { return }
+    while Uart16550.lsr.read() & 0x20 == 0 { cpu.pause() }
+    Uart16550.data.write(ch.toInt() as UInt8)
+  }
+
+  pub fn getc() -> Char? {
+    if not ready { return nil }
+    if Uart16550.lsr.read() & 0x01 == 0 { return nil }
+    Char.fromInt(Uart16550.data.read() as Int)
+  }
+}
+
+# ---------------------------------------------------------------- timer
+
+mod timer {
+  const HZ = 100
+  mut ticks: UInt64 = 0
+
+  pub fn init() {
+    Pit8254.command.write(0x36)                      # channel 0, square wave
+    let divisor = 1_193_182 / HZ
+    port.out8(0x40, (divisor & 0xFF) as UInt8)
+    port.out8(0x40, ((divisor >> 8) & 0xFF) as UInt8)
+  }
+
+  pub fn tick() {
+    ticks += 1
+    if ticks % (HZ as UInt64) == 0 {
+      console.puts("\n")
+      console.putInt((ticks / (HZ as UInt64)) as Int)
+      console.puts(" s")
+    }
+  }
+
+  pub fn millis() -> Int {
+    (ticks as Int) * (1000 / HZ)
+  }
+}
+
+# ---------------------------------------------------------------- keyboard
+
+mod keyboard {
+  const LAYOUT = "1234567890-=qwertyuiop[]asdfghjkl;'`\\zxcvbnm,./"
+
+  pub fn onKey() {
+    let raw = port.in8(0x60)
+    if raw & 0x80 != 0 { return }                    # key release
+
+    let index = (raw & 0x7F) as Int
+    if index >= LAYOUT.len { return }
+    console.puts(LAYOUT[index])
+  }
+}
+
+# ---------------------------------------------------------------- interrupts
+
+fn remapPic() {
+  Pic8259.cmd.write(0x11); cpu.ioWait()
+  Pic8259.data.write(0x20); cpu.ioWait()             # IRQ 0-7  -> vectors 32-39
+  Pic8259.data.write(0x28); cpu.ioWait()             # IRQ 8-15 -> vectors 40-47
+  Pic8259.data.write(0x04); cpu.ioWait()
+  Pic8259.data.write(0x01); cpu.ioWait()
+  Pic8259.data.write(0x00)
+  Pic8259.data.write(0x00)
+}
+
+#[interrupt(0x20)]
+fn onTimer(frame: Ptr<InterruptFrame>) {
+  timer.tick()
+  Pic8259.cmd.write(0x20)                            # end of interrupt
+}
+
+#[interrupt(0x21)]
+fn onKeyboard(frame: Ptr<InterruptFrame>) {
+  keyboard.onKey()
+  Pic8259.cmd.write(0x20)
+}
+
+# ---------------------------------------------------------------- heap
+
+mod heap {
+  mut base: UInt64 = 0
+  mut size: IntSize = 0
+  mut used: IntSize = 0
+
+  pub fn init(start: UInt64, len: IntSize) {
+    base = start
+    size = len
+    used = 0
+  }
+
+  pub fn alloc(len: IntSize, align: IntSize) -> Ptr<UInt8>? {
+    let aligned = (used + align - 1) / align * align
+    if aligned + len > size { return nil }
+    used = aligned + len
+    unsafe { Ptr<UInt8>.fromAddr(base + (aligned as UInt64)) }
+  }
+
+  pub fn stats() -> (IntSize, IntSize) {
+    (used, size)
+  }
+}
+
+# ---------------------------------------------------------------- entry
+
+#[link_section(".bss")]
+static mut STACK: [UInt8; 65536] = [0; 65536]
+
+#[naked]
+#[no_mangle]
+#[link_section(".boot")]
+fn _start() -> Never {
+  unsafe {
+    asm!(
+      "lea rsp, [rip + STACK + 65536]",
+      "xor rbp, rbp",
+      "call kmain",
+      "cli",
+      "1: hlt",
+      "jmp 1b",
+    )
+  }
+}
+
+fn haltForever() -> Never {
+  loop { cpu.halt() }
+}
+
+#[entry]
+fn kmain() -> Never {
+  uart.init(115200)
+  console.clear()
+  console.puts("velaos: booting\n")
+
+  timer.init()
+  remapPic()
+  interrupts.enable()
+  console.puts("velaos: timer and keyboard ready\n")
+
+  heap.init(start: 0x200000, len: 16 * 1024 * 1024)
+  let (used, total) = heap.stats()
+  console.puts("velaos: heap at ")
+  console.putHex(0x200000)
+  console.puts(", ")
+  console.putInt(total)
+  console.puts(" bytes\n")
+
+  console.puts("velaos: running, type something\n")
+  haltForever()
+}
+
+#[panic_handler]
+fn onPanic(info: PanicInfo) -> Never {
+  console.puts("\nvela panic: ")
+  console.puts(info.message)
+  console.puts(" at ")
+  console.puts(info.location.file)
+  console.putc(':')
+  console.putInt(info.location.line)
+  console.putc('\n')
+  haltForever()
+}

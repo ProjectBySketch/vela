@@ -1,0 +1,338 @@
+# spec example — a website. Not compiled by CI. Requires tier C (web profile).
+#
+# One package produces: static HTML for the marketing pages, a WASM island for
+# the cart button, and a native server for the API and the dynamic routes.
+
+use std::{json, time}
+use web::storage
+
+# ---------------------------------------------------------------- data
+
+#[derive(Json, Eq, Hash)]
+struct Product {
+  id: Int
+  name: Str
+  price: Float
+  summary: Str
+  imageName: Str
+  tags: List<Str> = []
+}
+
+#[derive(Json)]
+struct CartLine {
+  productId: Int
+  qty: Int = 1
+}
+
+#[derive(Json)]
+struct Cart {
+  mut lines: List<CartLine> = []
+}
+
+impl Cart {
+  fn count(self) -> Int { self.lines.fold(0, |a, l| a + l.qty) }
+  fn has(self, id: Int) -> Bool { self.lines.any(|l| l.productId == id) }
+  fn total(self, catalog: List<Product>) -> Float {
+    self.lines.fold(0.0, |a, l| a + l.qty * priceOf(catalog, l.productId))
+  }
+}
+
+impl Product {
+  fn money(self) -> Str { float.format(self.price, style: .currency("USD")) }
+  fn picture(self) -> Image { assets.load(self.imageName) }
+}
+
+fn priceOf(catalog: List<Product>, id: Int) -> Float {
+  catalog.find(|p| p.id == id)?.price ?? 0.0
+}
+
+# ---------------------------------------------------------------- theme
+
+theme Light {
+  token.surface    = #FFFFFF
+  token.background = #FAFAF9
+  token.ink        = #1C1917
+  token.muted      = #78716C
+  token.brand      = #0F766E
+  token.line       = #E7E5E4
+  token.radius     = 14dp
+  token.space      = (xs: 4dp, sm: 8dp, md: 16dp, lg: 32dp, xl: 64dp)
+}
+
+theme Dark extends Light {
+  token.surface    = #1C1917
+  token.background = #0C0A09
+  token.ink        = #FAFAF9
+  token.muted      = #A8A29E
+  token.line       = #292524
+}
+
+# ---------------------------------------------------------------- styles
+
+style Shell {
+  background: token.background
+  gap: token.space.lg
+  font: font("Inter", size: 16dp)
+  foreground: token.ink
+}
+
+style Wrap {
+  width: fill
+  maxWidth: 1120dp
+  alignSelf: .center
+  gap: token.space.lg
+}
+
+style NavBarStyle {
+  background: token.surface
+  border: 1dp solid token.line
+  pad: (y: token.space.sm, x: token.space.md)
+  dir: row
+  align: .center
+  justify: .between
+}
+
+style HeadStyle {
+  background: token.surface
+  border: 1dp solid token.line
+  pad: (y: token.space.sm, x: token.space.md)
+}
+
+style Card {
+  radius: 10dp
+  pad: token.space.md
+  gap: token.space.sm
+  background: token.surface
+  border: 1dp solid token.line
+  transition: shadow, translateY
+  transitionDuration: 160ms
+  when .hover {
+    translateY: -2dp
+    shadow: (x: 0dp, y: 6dp, blur: 18dp, color: #00000014)
+  }
+  @when self.width < 560dp { pad: token.space.sm }
+}
+
+style Headline { fontSize: 40dp; fontWeight: 800; lineHeight: 1.1 }
+style Price    { fontSize: 20dp; fontWeight: 700; foreground: token.brand }
+style Muted    { fontSize: 14dp; foreground: token.muted }
+
+style Cta {
+  background: token.brand
+  foreground: #FFFFFF
+  radius: 10dp
+  pad: (y: 12dp, x: 20dp)
+  fontWeight: 600
+  transition: background, opacity
+  transitionDuration: 120ms
+  when .hover    { background: token.brand.lighten(0.08) }
+  when .pressed  { background: token.brand.darken(0.08) }
+  when .disabled { opacity: 0.5 }
+}
+
+# ---------------------------------------------------------------- components
+
+component NavBar() {
+  row(style: NavBarStyle) {
+    link("Vela Store", "/").style(Price)
+    row(gap: token.space.md) {
+      link("Products", "/products")
+      link("About", "/about")
+      CartButton()
+    }
+  }
+}
+component CartButton() @island {
+  state cart: Cart = storage.local.get::<Cart>("cart") ?? Cart { }
+  link("Cart (${cart.count()})", "/cart").style(Cta)
+}
+
+component ProductCard(product: Product) {
+  column(style: Card) {
+    image(product.picture(), alt: product.name)
+      .size((w: 100%, h: 180dp))
+      .radius(10dp)
+    text(product.name).fontWeight(600)
+    text(product.summary).style(Muted).override(lineClamp: 3)
+    row(justify: .between, align: .center) {
+      text(product.money()).style(Price)
+      AddToCart(product)
+    }
+  }
+}
+
+component AddToCart(product: Product) @island {
+  state cart: Cart = storage.local.get::<Cart>("cart") ?? Cart { }
+
+  button(if cart.has(product.id) { "In cart" } else { "Add to cart" },
+         onTap: {
+           cart.lines.push(CartLine { productId: product.id })
+           storage.local.set("cart", cart)
+         })
+    .style(Cta)
+    .disabled(cart.has(product.id))
+}
+
+# ---------------------------------------------------------------- pages
+
+page Home() {
+  title = "Vela Store — tools for people who build things"
+  description = "Small, sharp tools. Free shipping over \$50."
+
+  column(style: Shell) {
+    NavBar()
+
+    column(style: Wrap) {
+      column(gap: token.space.sm) {
+        text("Tools that get out of the way").style(Headline)
+        text("Hand-picked, honestly described, shipped fast.").style(Muted)
+      }
+      row(gap: token.space.md, wrap: .wrap) {
+        each(featured(), key: |p| p.id) { |p| ProductCard(p) }
+      }
+    }
+
+    Footer()
+  }
+}
+
+page Products() {
+  title = "All products"
+
+  column(style: Shell) {
+    NavBar()
+    column(style: Wrap) {
+      text("Everything").style(Headline)
+      grid(columns: repeat(autoFill, min: 260dp), gap: token.space.md) {
+        each(allProducts(), key: |p| p.id) { |p| ProductCard(p) }
+      }
+    }
+    Footer()
+  }
+}
+
+page ProductDetail(id: Int) {
+  guard let product = allProducts().find(|p| p.id == id) else {
+    return NotFound()
+  }
+
+  title = product.name
+  description = product.summary
+
+  column(style: Shell) {
+    NavBar()
+    column(style: Wrap) {
+      row(gap: token.space.lg, wrap: .wrap) {
+        image(product.picture(), alt: product.name)
+          .size((w: 420dp, h: 320dp))
+          .radius(10dp)
+          .weight(1)
+        column(gap: token.space.sm, weight: 1) {
+          text(product.name).style(Headline)
+          text(product.money()).style(Price)
+          text(product.summary)
+          AddToCart(product)
+        }
+      }
+    }
+    Footer()
+  }
+}
+
+page About() {
+  title = "About"
+
+  column(style: Shell) {
+    NavBar()
+    column(style: Wrap) {
+      text("About us").style(Headline)
+      text("We are three people and a workshop.")
+    }
+    Footer()
+  }
+}
+
+page NotFound() {
+  title = "Not found"
+
+  column(style: Shell) {
+    NavBar()
+    column(style: Wrap) {
+      text("404").style(Headline)
+      link("Back home", "/").style(Cta)
+    }
+    Footer()
+  }
+}
+
+view Footer() {
+  row(style: Wrap, justify: .between) {
+    text("© ${datetime.now().year} Vela Store").style(Muted)
+    row(gap: token.space.md) {
+      link("Privacy", "/privacy").style(Muted)
+      link("Terms", "/terms").style(Muted)
+    }
+  }
+}
+
+# ---------------------------------------------------------------- routes
+
+#[app]
+view Root() {
+  theme(follow: .system, light: Light, dark: Dark) {
+    routes {
+      "/"             => Home()
+      "/products"     => Products()
+      "/products/:id" => ProductDetail(id: params.int("id")?)
+      "/about"        => About()
+      "*"             => NotFound()
+    }
+  }
+}
+
+# ---------------------------------------------------------------- server
+
+fn main() -> Result<Void, Error> {
+  let app = server.new()
+  app.use(logging())
+  app.use(compress())
+  app.use(session.cookie(secret: env.require("SESSION_SECRET")))
+  app.routes(Root())
+  app.error(404, NotFound())
+  app.static("/assets", from: "dist/assets")
+  app.csp("default-src 'self'; img-src 'self' data:")
+  app.listen(port: 8080)
+}
+
+@get("/api/products")
+fn apiProducts(req: Request) -> Result<Json<List<Product>>, ApiError> {
+  Ok(Json(allProducts()))
+}
+
+@post("/api/cart")
+fn apiAddToCart(req: Request) -> Result<Json<CartLine>, ApiError> {
+  let body = try req.json::<CartLine>()?
+  if body.qty < 1 { fail ApiError.badRequest("qty must be positive") }
+  guard allProducts().any(|p| p.id == body.productId) else {
+    fail ApiError.notFound("product")
+  }
+  Ok(Json(body))
+}
+
+# ---------------------------------------------------------------- data
+
+fn allProducts() -> List<Product> {
+  [
+    Product { id: 1, name: "Bench Plane", price: 89.0, imageName: "plane.jpg",
+              summary: "A hand plane that actually holds its setting.",
+              tags: ["wood", "hand tool"] },
+    Product { id: 2, name: "Marking Knife", price: 24.0, imageName: "knife.jpg",
+              summary: "Single bevel, cuts a line you can feel.",
+              tags: ["layout"] },
+    Product { id: 3, name: "Sliding Bevel", price: 32.0, imageName: "bevel.jpg",
+              summary: "Locks at any angle and stays there.",
+              tags: ["layout"] },
+  ]
+}
+
+fn featured() -> List<Product> { allProducts().take(3) }

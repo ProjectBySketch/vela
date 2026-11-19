@@ -1,0 +1,333 @@
+# 08 — Modules and packages
+
+**Status:** `spec`. 0.1 has a single global namespace per file and no packages.
+
+---
+
+## 1. Modules
+
+A module is a namespace and a visibility boundary.
+
+```vela
+mod geometry {
+  pub struct Point { x: Float, y: Float }
+
+  pub fn area(p: Point) -> Float { p.x * p.y }
+
+  fn helper() { }              # private to geometry
+}
+
+geometry::Point { x: 1.0, y: 2.0 }
+geometry::area(p)
+```
+
+### 1.1 File modules
+
+| On disk | Declared as |
+| --- | --- |
+| `src/main.vela` | the crate root |
+| `src/geometry.vela` | `mod geometry` |
+| `src/geometry/shape.vela` | `mod shape` **inside** `geometry` |
+| `src/geometry/mod.vela` | the module `geometry` itself (with submodules) |
+
+The compiler walks from `src/main.vela` following `mod` declarations; a
+`mod name` with no body means `name.vela` or `name/mod.vela` next to the current
+file. Files not reachable that way are not compiled.
+
+### 1.2 Inline modules
+
+`mod name { ... }` nests a module inside a file. It is a real namespace, not a
+syntactic grouping: names inside are not visible outside without `name::` or a
+`use`.
+
+### 1.3 Attributes on modules
+
+```vela
+#[cfg(target: "ios")]
+mod platform_ios
+```
+
+`mod` may be attributed with anything in doc 12 §4; `cfg` and `doc` matter most.
+
+---
+
+## 2. Paths and `use`
+
+```vela
+use geometry::Point                            # one item
+use geometry::{Point, area}                    # a group
+use geometry::{area as computeArea}            # rename
+use geometry::*                                # everything public
+use std::{fs, io::{File, Read}}
+use self::shape                                # current module
+use super::shared                              # parent module
+use crate::db                                  # crate root
+```
+
+Rules:
+
+* `use` brings a name into the current module's namespace. It does not re-export
+  unless written `pub use`.
+* `use` is ordered and idempotent; duplicates are `W-MOD-010`.
+* A name brought in by `use` may be shadowed by a local declaration, with a
+  warning (`W-MOD-011`).
+* Glob imports are allowed but their names lose to explicit imports and to local
+  declarations. An ambiguous glob (two globs providing the same name, both used)
+  is `E-MOD-020`.
+
+The prelude (`std::prelude`) is imported automatically: `print`, `println`,
+`len`, `str`, `num`, `List`, `Map`, `Set`, `Str`, `Option`, `Result`, `panic`,
+`assert`, `typeName`. Anything else must be `use`d — a deliberate difference
+from scripting languages, because a reader should be able to see where a name
+comes from.
+
+---
+
+## 3. Visibility
+
+| Form | Visible to |
+| --- | --- |
+| (none) | the module and its descendants |
+| `pub` | everywhere |
+| `pub(crate)` | this package |
+| `pub(package: "name")` | a named package |
+| `pub(in a::b)` | the module path `a::b` and below |
+| `private` | the owning declaration's `impl` blocks only |
+
+An item's visibility may not exceed the visibility of a type it exposes in a
+signature (`E-MOD-030` — "private type in public interface"). This is the rule
+that keeps a library's API from accidentally leaking an internal type.
+
+---
+
+## 4. The manifest
+
+A package is a directory with `vela.pkg` at its root.
+
+```toml
+[package]
+name        = "acme/dashboard"
+version     = "1.4.0"
+edition     = "2026"
+description = "The Acme status board"
+license     = "MIT"
+authors     = ["Ada <ada@acme.example>"]
+profile     = "web"              # core | app | web | sys
+strict      = true
+entry       = "src/main.vela"
+
+[deps]
+std  = "1"
+http = "^3.2"
+db   = "0.9"
+
+[devDeps]
+testkit = "1"
+
+[targets.ios]
+profile = "app"
+entry   = "src/app.vela"
+
+[deps.ios]
+metal = "0.4"
+
+[targets.wasm]
+profile = "web"
+entry   = "src/client.vela"
+
+[features]
+default = ["tls"]
+tls     = []
+metrics = ["dep:prometheus"]
+
+[serve]
+root = "public"
+port = 8080
+
+[build]
+optimise = "speed"               # none | speed | size | debug
+warnings = "deny"
+```
+
+### 4.1 Fields, completely
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | `scope/name` or a bare name for an unscoped package |
+| `version` | yes | semver, no leading `v` |
+| `edition` | yes | which spec edition the source is written against |
+| `profile` | yes | the default profile |
+| `strict` | no | `true` to check in `strict` mode (default `false`) |
+| `entry` | no | overrides the profile's default entry file |
+| `description`, `license`, `authors`, `homepage`, `repository` | no | metadata |
+| `deps` | no | runtime dependencies |
+| `devDeps` | no | only for `vela test` |
+| `features` | no | named sets of optional dependencies or flags |
+| `targets` | no | per-target overrides of `profile`, `entry`, and deps |
+| `serve` | no | server configuration for `vela serve` |
+| `build` | no | optimisation and warning policy |
+| `[assets]` | no | asset roots (doc 13 §9) |
+| `[registry]` | no | alternate registry URL |
+
+An unknown key is `E-PKG-010` (never silently ignored: a typo in `devdeps`
+should not look like it worked).
+
+---
+
+## 5. Dependency resolution
+
+* Version requirements are semver ranges: `"1"` (^1), `"^3.2"`, `"~0.9.1"`,
+  `"=1.0.0"`, `"*"`, `">=2 <4"`.
+* Resolution is performed once and written to `vela.lock`, which MUST be
+  committed for applications and MAY be committed for libraries.
+* `vela build --frozen` refuses to change the lock; CI uses it.
+* Two packages that require incompatible versions of the same name are an error
+  unless one is renamed:
+  `db2 = { package = "acme/db", version = "2" }`.
+* Resolution is maximal-matching with no backtracking surprises: the algorithm is
+  a simple lowest-compatible selection, documented so that two toolchains produce
+  the same lock file (`planned`: a formal algorithm with a reference
+  implementation).
+
+---
+
+## 6. Features
+
+```toml
+[features]
+default  = ["tls"]
+tls      = ["dep:openssl"]
+metrics  = []
+```
+
+```vela
+#[cfg(feature: "metrics")]
+pub fn record(name: Str, value: Float) { ... }
+```
+
+* A feature is a compile-time flag, resolved before compilation.
+* `dep:name` makes an optional dependency available only with the feature.
+* Features are **additive**: enabling one may not break another. A feature that
+  removes functionality is `W-PKG-020`.
+
+---
+
+## 7. Coherence across packages
+
+This is the rule that makes separate compilation predictable.
+
+1. An `impl Trait for Type` must be written in a module that owns `Trait` or owns
+   `Type`.
+2. A package may not add conformance to two foreign types
+   (`E-GEN-010`, doc 07 §8).
+3. Two conformances for the same pair anywhere in the dependency graph are
+   `E-GEN-011`, reported with both locations and the dependency path to each.
+
+`extension` blocks are exempt only in the sense that they add methods, not
+conformance — and the compiler still rejects a name collision with an inherent
+method (`E-DATA-080`).
+
+---
+
+## 8. Conditional compilation
+
+```vela
+#[cfg(target: "ios")]        fn homeIndicator() { ... }
+#[cfg(profile: "sys")]       fn halt() -> Never { ... }
+#[cfg(os: "linux")]          fn epoll() { ... }
+#[cfg(arch: "aarch64")]      fn fence() { ... }
+#[cfg(feature: "tls")]       fn handshake() { ... }
+#[cfg(test)]                 mod tests { ... }
+#[cfg(all(debug))]           fn dump() { ... }
+#[cfg(any(os: "macos", os: "ios"))]  fn darwin() { ... }
+#[cfg(not(target: "wasm"))]  fn threads() { ... }
+```
+
+`cfg` accepts `all(...)`, `any(...)`, `not(...)`, and the keys `target`,
+`profile`, `os`, `arch`, `feature`, `test`, `debug`, `release`, `version`.
+
+Conditional compilation removes the item **before** type checking, so a
+`sys`-only function may use `Ptr` in a file that also compiles for `web`.
+
+---
+
+## 9. Workspaces
+
+**Planned.**
+
+```toml
+[workspace]
+members = ["app", "server", "shared"]
+```
+
+One lock file, one `vela build` at the root, shared feature resolution. Until it
+lands, a package may depend on a sibling by path:
+
+```toml
+[deps]
+shared = { path = "../shared" }
+```
+
+---
+
+## 10. The registry
+
+**Planned** (`registry.vela.dev`). The model:
+
+* Packages are immutable once published; `yank` hides a version from new
+  resolutions without breaking existing locks.
+* Every published package has a content hash in the lock file, verified on
+  download (`E-PKG-030` on mismatch).
+* `vela publish` requires a licence, a description and a passing test run.
+* `vela vendor` copies every dependency under `vendor/`; `--offline` uses it.
+
+---
+
+## 11. Layout of a package
+
+```
+dashboard/
+  vela.pkg
+  vela.lock
+  README.md
+  src/
+    main.vela
+    routing.vela
+    components/
+      mod.vela
+      card.vela
+  assets/
+    logo.svg
+  tests/
+    routing.vela
+  spec/                      # optional, non-compiled documentation
+```
+
+* `src/main.vela` is the entry unless `entry` says otherwise.
+* `tests/*.vela` holds integration tests, compiled against the package as an
+  external user would.
+* `assets/` is reachable through the `asset` declarations of doc 13 §9.
+* Nothing outside `src/` and `tests/` is compiled.
+
+---
+
+## 12. Diagnostics
+
+| Code | Meaning |
+| --- | --- |
+| `E-MOD-010` | module not found (with the searched paths) |
+| `E-MOD-020` | ambiguous name from two globs |
+| `E-MOD-030` | private type in a public interface |
+| `E-MOD-040` | cyclic module inclusion |
+| `E-MOD-050` | cyclic package dependency |
+| `W-MOD-010` | duplicate `use` |
+| `W-MOD-011` | shadowed import |
+| `E-PKG-010` | unknown manifest key |
+| `E-PKG-020` | version requirement does not match any published version |
+| `E-PKG-030` | downloaded package hash mismatch |
+| `E-PKG-040` | missing `vela.lock` under `--frozen` |
+| `W-PKG-020` | non-additive feature |
+
+---
+
+Next: [09-memory.md](09-memory.md).

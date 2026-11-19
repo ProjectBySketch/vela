@@ -1,0 +1,203 @@
+#![strict]
+# spec example — core language tour. Not compiled by CI. Requires tier A.
+
+use std::{fmt, list, str, math}
+
+# ---------------------------------------------------------------- values
+
+const MAX_RETRIES = 3
+const TABLE: List<Int> = comptime { (0..<8).map(|n| n * n) }
+
+let greeting: Str = "hello"
+mut counter: Int = 0
+let ratio: Float = 1.5
+let flag: Bool = true
+let nothing: Int? = nil
+
+# ---------------------------------------------------------------- data
+
+enum Payment {
+  cash(amount: Float)
+  card(last4: Str, amount: Float)
+  transfer(iban: Str, amount: Float)
+}
+
+struct Point {
+  x: Float
+  y: Float
+}
+
+shared struct Account {
+  owner: Str
+  mut balance: Float = 0.0
+  mut history: List<Payment> = []
+}
+
+trait Shape2D {
+  fn area(self) -> Float
+  fn name(self) -> Str
+
+  fn describe(self) -> Str {
+    "${self.name()} of area ${num.format(self.area(), precision: 2)}"
+  }
+}
+
+impl Shape2D for Point {
+  fn area(self) -> Float { 0.0 }
+  fn name(self) -> Str { "point" }
+}
+
+impl Drop for Account {
+  fn drop(consuming self) {
+    print("account ${self.owner} closed")
+  }
+}
+
+# ---------------------------------------------------------------- generics
+
+fn mapList<T, U>(xs: List<T>, f: Func(T) -> U) -> List<U> {
+  mut out: List<U> = []
+  for x in xs { out.push(f(x)) }
+  out
+}
+
+fn maxOf<T: Ord + Display>(xs: List<T>) -> T? {
+  mut best: T? = nil
+  for x in xs {
+    match best {
+      nil => { best = Some(x) }
+      Some(b) => { if x > b { best = Some(x) } }
+    }
+  }
+  best
+}
+
+# ---------------------------------------------------------------- errors
+
+#[derive(Error, Eq)]
+enum PayError {
+  amountNotPositive(amount: Float)
+  insufficientBalance(needed: Float, available: Float)
+}
+
+impl Payment {
+  fn amount(self) -> Float {
+    match self {
+      Payment::cash(a)        => a
+      Payment::card(_, a)     => a
+      Payment::transfer(_, a) => a
+    }
+  }
+}
+
+fn charge(account: mut Account, p: Payment) -> Result<Void, PayError> {
+  let amount = p.amount()
+  if amount <= 0.0 { fail PayError.amountNotPositive(amount) }
+  if amount > account.balance {
+    fail PayError.insufficientBalance(needed: amount, available: account.balance)
+  }
+  account.balance -= amount
+  account.history.push(p)
+  Ok(unit)
+}
+
+# ---------------------------------------------------------------- closures
+
+fn makeCounter() -> Func() -> Int {
+  mut n = 0
+  move || {
+    n += 1
+    n
+  }
+}
+
+# ---------------------------------------------------------------- pattern matching
+
+fn classify(code: Int) -> Str {
+  match code {
+    200..<300            => "ok"
+    301 | 302 | 307      => "redirect"
+    400..<500            => "client error"
+    500..<600            => "server error"
+    n if n < 0           => "invalid"
+    _                    => "unknown"
+  }
+}
+
+fn sumTree(tree: Tree<Int>) -> Int {
+  match tree {
+    Tree::leaf                       => 0
+    Tree::node(left, value, right)   => sumTree(left) + value + sumTree(right)
+  }
+}
+
+enum Tree<T> { leaf, node(left: Tree<T>, value: T, right: Tree<T>) }
+
+# ---------------------------------------------------------------- comprehensions
+
+let squares = [n * n for n in 0..<10]
+let evens   = [n for n in squares if n % 2 == 0]
+let lookup  = {"a": 1, "b": 2, "c": 3}
+
+# ---------------------------------------------------------------- concurrency
+
+async fn simulate(n: Int) -> Result<List<Int>, Error> {
+  let group = TaskGroup()
+  mut tasks: List<Task<Int>> = []
+  for i in 0..<n {
+    tasks.push(group.spawn { work(i) })
+  }
+  mut out: List<Int> = []
+  for t in tasks { out.push(await t) }
+  Ok(out)
+}
+
+fn work(i: Int) -> Int {
+  time.sleep(Duration.fromMillis(i * 10))
+  i * i
+}
+
+# ---------------------------------------------------------------- entry
+
+fn main(args: List<Str>) -> Result<Void, Error> {
+  println("${greeting}, world")            # hello, world
+  println("squares: ${squares}")           # squares: [0, 1, 4, ..., 81]
+  println("evens:   ${evens}")             # evens:   [0, 4, 16, 36, 64]
+
+  mut account = Account { owner: "ada", balance: 100.0 }
+
+  charge(account, Payment::card(last4: "4242", amount: 25.0))?
+  charge(account, Payment::transfer(iban: "GB33", amount: 10.0))?
+
+  let bad = charge(account, Payment::cash(amount: -1.0))
+  match bad {
+    Err(e) => println("rejected: ${e.message()}"),
+    Ok(_) => unreachable(),
+  }
+
+  println("balance: ${account.balance}")   # balance: 65
+  println(classify(404))                   # client error
+  println(maxOf([3, 9, 2]) ?? 0)           # 9
+
+  let next = makeCounter()
+  println("${next()} ${next()}")           # 1 2
+
+  let tree = Tree::node(
+    left: Tree::node(left: Tree::leaf, value: 2, right: Tree::leaf),
+    value: 1,
+    right: Tree::leaf,
+  )
+  println("tree sum: ${sumTree(tree)}")    # tree sum: 2
+
+  let results = try await simulate(4) catch e {
+    println("simulation failed: ${e.message()}")
+    []
+  }
+  println("results: ${results}")           # results: [0, 1, 4, 9]
+
+  for (i, ch) in "hey".enumerate() {
+    println("${i}: ${ch}")
+  }
+
+  Ok(unit)
+}

@@ -166,6 +166,55 @@ No semicolons are needed (`;` is accepted and ignored) and newlines carry no
 meaning; `{` and `}` do the grouping. That keeps the grammar small enough to
 read in one sitting.
 
+## The specification
+
+Everything above describes what the compiler does **today**. What the language is
+meant to become is written down in [`spec/`](spec/README.md): nineteen documents
+covering a full programming language in four profiles.
+
+| Profile | Replaces | Status |
+| --- | --- | --- |
+| `core` | Python, Go, Ruby | `spec` |
+| `app` | SwiftUI, UIKit, Compose | `spec` |
+| `web` | HTML, CSS, JavaScript, TypeScript | `spec` |
+| `sys` | C, C++, Rust `no_std` | `spec` |
+
+Highlights of the specification, so the scale is auditable rather than claimed:
+
+* **60 reserved keywords** and 18 contextual ones (0.1 has 14 keywords).
+* **24 primitive and composite types**, a gradual type system with `strict` and
+  `loose` modes, generics with bounds and associated types, traits, enums with
+  payloads, `Result<T, E>`, `T?`, and checked exhaustive `match`.
+* **No borrow checker and no tracing GC**: reference counting, copy-on-write,
+  `unique` move values, a cycle collector, and `unsafe` for raw pointers.
+* **Structured concurrency**: `async`/`await`, `TaskGroup`, channels, actors,
+  `Mutex`/`Atomic`, and compile-time rejection of lock-held-across-`await`.
+* **Styling as part of the language** (doc 13): typed styles with **214 checked
+  properties**, no cascade, no specificity, container queries, themes and tokens,
+  animation with automatic reduced-motion handling, accessibility fields on the
+  element. This is the CSS replacement, and the reason it cannot have CSS's
+  failure modes.
+* **A web profile** (doc 14) that compiles the same views to DOM + WASM, to static
+  HTML, or to a native server, with `Markup` escaping by construction and
+  parameterised SQL.
+* **A systems profile** (doc 15) with `mmio` register blocks, `#[interrupt]`,
+  `asm!`, `#[entry]`, page allocators, and no runtime at all — enough to write an
+  operating system kernel.
+* **40 standard library modules** with over 1,100 items.
+* **A migration map** (doc 19) from Swift, SwiftUI, JS/TS, Python, HTML, CSS, Rust,
+  C, C++, Java/Kotlin and Go.
+
+`spec/00-status.md` marks **every** feature `impl`, `spec` or `planned`, so the
+distance between this repository and that language is never a guess. It is large:
+the compiler implements six value types and fifteen builtins; the specification
+describes a language roughly a hundred times that surface area. That is stated in
+the spec itself, first page, in bold.
+
+The examples in [`spec/examples/`](spec/examples/README.md) — a language tour, a
+notes app, a store website, a kernel — are **not** built by CI, because they use
+features `velac` does not implement yet. They exist to be read, and to give the
+next implementation something to aim at.
+
 ## How it works
 
 * `src/velac.c` - the compiler: lexer, recursive-descent parser and C emitter,
@@ -214,13 +263,17 @@ Vela 0.1.0 is a real language and a real compiler, but it is a first version:
 * no closures, classes/structs, maps or modules yet;
 * functions are top level only, and calling a value stored in a variable is not
   supported;
-* there is no HTML/CSS/JS backend and no UI toolkit of its own - the web target
-  (Vela to JS/WASM, plus a declarative UI layer) is the next big piece;
+* there is no HTML/CSS/JS backend and no UI toolkit of its own — the web target
+  (Vela to JS/WASM, plus a declarative UI layer) is **specified** in
+  [`spec/14-web.md`](spec/14-web.md) and [`spec/13-ui.md`](spec/13-ui.md) but not
+  implemented;
 * error messages point at a line, not a column, and there is no debugger.
 
-The roadmap beyond that: a collector, structs and methods, modules, a `vela
-fmt` formatter, an LSP server for editors, and the web/UI backend that would let
-Vela replace HTML, CSS and JavaScript rather than only native code.
+Read those two bullets together with the specification: the design is pinned
+down and reviewable, and the compiler is nowhere near it. The order the roadmap
+actually has to go in is: a real type checker, then structs and traits, then RC
+and the cycle collector, then modules, then the UI and web backends. Each step is
+a document that already says exactly what to build.
 
 ## License
 

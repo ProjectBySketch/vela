@@ -1,0 +1,277 @@
+# spec example — an app. Not compiled by CI. Requires tier B (app profile).
+# Everything here uses only what docs 13 and 18 define.
+
+use std::{fs, json, time, uuid}
+
+# ---------------------------------------------------------------- data
+
+#[derive(Json, Eq, Hash, Display)]
+shared struct Note {
+  id: Str
+  mut title: Str
+  mut body: Str
+  mut done: Bool = false
+  mut updated: Instant
+}
+
+enum Filter { all, active, done }
+
+impl Note {
+  fn preview(self) -> Str {
+    if self.body.isEmpty { "(no text)" } else { self.body }
+  }
+}
+
+impl Filter {
+  fn label(self) -> Str {
+    match self {
+      Filter::all    => "All"
+      Filter::active => "Open"
+      Filter::done   => "Done"
+    }
+  }
+
+  fn keeps(self, note: Note) -> Bool {
+    match self {
+      Filter::all    => true
+      Filter::active => not note.done
+      Filter::done   => note.done
+    }
+  }
+}
+
+struct Book {
+  mut notes: List<Note> = []
+  mut filter: Filter = .all
+}
+
+# ---------------------------------------------------------------- persistence
+
+fn storePath() -> Str { "${env.cwd()}/notes.json" }
+
+impl Book {
+  fn load() -> Result<Book, Error> {
+    if not try fs.exists(storePath())? { return Ok(Book { }) }
+    let text = try fs.readStr(storePath())?
+    Ok(Book { notes: try json.parseAs::<List<Note>>(text)? })
+  }
+
+  fn save(self) -> Result<Void, Error> {
+    try fs.writeStr(storePath(), json.writePretty(self.notes, indent: 2))?
+    Ok(unit)
+  }
+
+  fn shown(self) -> List<Note> {
+    self.notes.filter(|n| self.filter.keeps(n))
+  }
+
+  fn add(mut self, title: Str) -> Note {
+    let note = Note {
+      id: uuid.v4(),
+      title: title,
+      body: "",
+      done: false,
+      updated: time.now(),
+    }
+    self.notes.push(note)
+    note
+  }
+
+  fn setDone(mut self, id: Str, done: Bool) {
+    for n in self.notes {
+      if n.id == id { n.done = done; n.updated = time.now() }
+    }
+  }
+
+  fn remove(mut self, id: Str) {
+    self.notes = self.notes.filter(|n| n.id != id)
+  }
+}
+
+# ---------------------------------------------------------------- theme and styles
+
+theme Light {
+  token.surface    = #FFFFFF
+  token.background = #F9FAFB
+  token.onSurface  = #111827
+  token.muted      = #6B7280
+  token.brand      = #2563EB
+  token.outline    = #E5E7EB
+  token.radius     = 12dp
+  token.space      = (xs: 4dp, sm: 8dp, md: 16dp, lg: 24dp)
+}
+
+theme Dark extends Light {
+  token.surface    = #111827
+  token.background = #0B1220
+  token.onSurface  = #F9FAFB
+  token.muted      = #9CA3AF
+  token.outline    = #1F2937
+}
+
+style ScreenStyle {
+  background: token.background
+  pad: token.space.md
+  gap: token.space.md
+  @when self.width < 500dp { pad: token.space.sm }
+}
+
+style CardStyle {
+  background: token.surface
+  radius: token.radius
+  pad: token.space.md
+  border: 1dp solid token.outline
+  shadow: (x: 0dp, y: 1dp, blur: 6dp, color: #00000010)
+  transition: background, shadow
+  transitionDuration: 120ms
+  when .hover   { shadow: (x: 0dp, y: 2dp, blur: 10dp, color: #0000001A) }
+  when .pressed { background: token.surface.darken(0.03) }
+}
+
+style BaseButton {
+  radius: 10dp
+  pad: (y: 10dp, x: 16dp)
+  transition: background, opacity
+  transitionDuration: 100ms
+  when .disabled { opacity: 0.45 }
+}
+
+style PrimaryButton extends BaseButton {
+  background: token.brand
+  foreground: #FFFFFF
+}
+
+style Chip {
+  background: token.surface
+  border: 1dp solid token.outline
+  radius: 999dp
+  pad: (y: 6dp, x: 12dp)
+  fontSize: 13dp
+}
+
+style PrimaryChip extends Chip {
+  background: token.brand
+  foreground: #FFFFFF
+  border: 1dp solid token.brand
+}
+
+style TitleStyle { fontSize: 28dp; fontWeight: 700; foreground: token.onSurface }
+style MutedStyle { fontSize: 13dp; foreground: token.muted }
+
+# ---------------------------------------------------------------- leaf views
+
+view FilterBar(count: Int, active: Filter, onPick: Func(Filter) -> Void) {
+  row(align: .center, justify: .between, gap: token.space.sm) {
+    column {
+      text("Notes").style(TitleStyle)
+      text("${count} shown").style(MutedStyle)
+    }
+    row(gap: token.space.xs) {
+      each([Filter::all, Filter::active, Filter::done]) { |f|
+        button(f.label(), onTap: { onPick(f) })
+          .style(if f == active { PrimaryChip } else { Chip })
+      }
+    }
+  }
+}
+
+view NoteRow(note: Note, onToggle: Func(Bool) -> Void, onDelete: Func() -> Void) {
+  row(style: CardStyle, align: .start, gap: token.space.sm) {
+    toggle(note.done, onChange: onToggle)
+      .label("Mark \"${note.title}\" as done")
+
+    column(gap: 2dp, weight: 1) {
+      text(note.title)
+        .style(if note.done { DoneTitle } else { TitleStyle })
+      when(not note.body.isEmpty) {
+        text(note.preview()).style(MutedStyle).override(lineClamp: 2)
+      }
+    }
+
+    button("", onTap: onDelete) { icon("trash") }
+      .label("Delete \"${note.title}\"")
+      .haptic(.warning)
+  }
+}
+
+style DoneTitle extends TitleStyle {
+  textDecoration: strike
+  fontWeight: 400
+  foreground: token.muted
+}
+
+view Composer(draft: Str, onDraft: Func(Str) -> Void, onAdd: Func() -> Void) {
+  column(style: CardStyle, gap: token.space.sm) {
+    field(draft, onChange: onDraft)
+      .label("New note title")
+      .hint("Type and press enter")
+      .onKey(.enter) { onAdd() }
+
+    row(justify: .end, gap: token.space.sm) {
+      button("Clear", onTap: { onDraft("") })
+        .style(BaseButton)
+        .disabled(draft.isEmpty)
+      button("Add", onTap: onAdd)
+        .style(PrimaryButton)
+        .disabled(draft.trim().isEmpty)
+        .haptic(.success)
+    }
+  }
+}
+
+# ---------------------------------------------------------------- screen
+
+view NotesScreen() {
+  state book: Book = try Book.load() catch { Book { } }
+  state draft: Str = ""
+  computed shown: List<Note> = book.shown()
+
+  fn persist() {
+    try book.save() catch e {
+      log.error("could not save notes: ${e.message()}")
+    }
+  }
+
+  fn addNote() {
+    let title = draft.trim()
+    guard not title.isEmpty else { return }
+    book.add(title)
+    draft = ""
+    persist()
+  }
+
+  onDisappear { persist() }
+
+  column(style: ScreenStyle) {
+    FilterBar(count: shown.len, active: book.filter,
+              onPick: |f| { book.filter = f })
+    Composer(draft: draft, onDraft: |v| { draft = v }, onAdd: addNote)
+
+    when(shown.isEmpty) {
+      text("Nothing here yet.").style(MutedStyle)
+    } else {
+      scroll {
+        column(gap: token.space.sm) {
+          each(shown, key: |n| n.id) { |note|
+            NoteRow(
+              note: note,
+              onToggle: |done| { book.setDone(note.id, done); persist() },
+              onDelete: { book.remove(note.id); persist() },
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+# ---------------------------------------------------------------- app root
+
+#[app]
+view App() {
+  theme(follow: .system, light: Light, dark: Dark) {
+    Nav {
+      route(.root) { NotesScreen() }
+    }
+  }
+}

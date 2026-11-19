@@ -62,17 +62,3 @@ jobs:
           name: vela-macos
           path: dist/*.dmg
           if-no-files-found: error
-
-  ios:
-    name: ios app (.ipa, unsigned)
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - run: make
-      - name: Build the unsigned .ipa
-        run: bash packaging/ios/build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vela-ios
-          path: dist/*.ipa
-          if-no-files-found: error

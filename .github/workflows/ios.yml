@@ -1,0 +1,76 @@
+name: ios
+
+# The iOS app is the priority artifact, so it gets its own workflow:
+# it runs on its own (no other job can fail it), it only builds what the
+# IPA needs, and it can be triggered by hand from the Actions tab.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "runtime/**"
+      - "ios/**"
+      - "examples/ios_demo.vela"
+      - "packaging/ios/**"
+      - "Makefile"
+      - "VERSION"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: unsigned ipa
+    runs-on: macos-13
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun --sdk iphoneos clang --version
+
+      - name: Build velac and the runtime
+        run: make
+
+      - name: Compile the app and package the ipa
+        run: bash packaging/ios/build.sh
+
+      - name: Check the bundle
+        run: |
+          APP="dist/stage-ios/Vela.app"
+          test -x "$APP/Vela"
+          file "$APP/Vela"
+          otool -l "$APP/Vela" | grep -A4 LC_BUILD_VERSION || true
+          plutil -lint "$APP/Info.plist"
+          plutil -p "$APP/Info.plist" | head -20
+
+      - name: Record the artifact in the run summary
+        run: |
+          IPA="$(ls dist/*.ipa)"
+          SIZE="$(du -h "$IPA" | cut -f1)"
+          {
+            echo "### Vela for iOS"
+            echo ""
+            echo "- artifact: \`vela-ios\`"
+            echo "- file: \`$(basename "$IPA")\` ($SIZE)"
+            echo "- unsigned: sign it with Sideloadly, AltStore or TrollStore"
+            echo ""
+            echo "The app runs \`examples/ios_demo.vela\`, compiled by \`velac\` to C"
+            echo "and built with clang for arm64."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vela-ios
+          path: dist/*.ipa
+          if-no-files-found: error

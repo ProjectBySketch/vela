@@ -11,13 +11,33 @@ fn fib(n) {
   return fib(n - 1) + fib(n - 2)
 }
 
+mut values = []
 mut i = 0
 while i < 12 {
-  print(fib(i))
-  print(" ")
+  push(values, fib(i))
   i += 1
+}
+println("fib: ${join(values, " ")}")
+println("")
+
+let info = {name: "Vela", version: "0.2.0", target: "arm64 iOS"}
+for key in info {
+  println("${key}: ${info[key]}")
 }
 println("")
 
-println("range(5) = " + str(range(5)))
-println("type(1) = " + type(1))
+let xs = [10, 20, 30]
+println("first: ${xs[0]}, last: ${xs[-1]}")
+println("range(5): ${range(5)}")
+println("upper: ${upper("vela")}")
+println("")
+
+mut counts = {}
+for word in split("to be or not to be", " ") {
+  if has(counts, word) {
+    counts[word] = counts[word] + 1
+  } else {
+    counts[word] = 1
+  }
+}
+println("words: ${counts}")

@@ -55,7 +55,13 @@ static void vela_ios_write(const char *text) {
   title.translatesAutoresizingMaskIntoConstraints = NO;
 
   UILabel *subtitle = [[UILabel alloc] init];
-  subtitle.text = @"one language, compiled to C";
+  {
+    NSString *version = [[NSBundle mainBundle]
+        objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    subtitle.text = [NSString
+        stringWithFormat:@"Vela %@ — one language, compiled to C",
+                         version != nil ? version : @"?"];
+  }
   subtitle.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
   subtitle.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
   subtitle.translatesAutoresizingMaskIntoConstraints = NO;

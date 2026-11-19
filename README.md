@@ -14,19 +14,25 @@ hello.vela ──velac──▶ hello.c ──clang / cc──▶ native binary
 
 ## What CI produces
 
-Every push to `main` runs [`.github/workflows/build.yml`](.github/workflows/build.yml)
-and uploads three unsigned artifacts:
+Every push to `main` runs three workflows:
 
-| Artifact | Contents | How to use |
-| --- | --- | --- |
-| `vela-ios` | `Vela-0.2.0-ios-unsigned.ipa` — the Vela playground app, built for arm64 iOS 15+ | Sign it with Sideloadly / AltStore / TrollStore and install |
-| `vela-macos` | `Vela-0.2.0-macos-universal-unsigned.dmg` — universal (arm64 + x86_64) `velac` | Open, run `install.sh`, or copy by hand |
-| `vela-debian` | `vela_0.2.0_<arch>.deb` — `velac` + runtime under `/usr/bin` and `/usr/lib/vela` | `sudo dpkg -i vela_0.2.0_amd64.deb` |
+| Workflow | Artifact | Contents | How to use |
+| --- | --- | --- | --- |
+| [`ios.yml`](.github/workflows/ios.yml) | `vela-ios` | `Vela-0.2.0-ios-unsigned.ipa` — the Vela playground app, built for arm64 iOS 15+ | Sign it with Sideloadly / AltStore / TrollStore and install |
+| [`build.yml`](.github/workflows/build.yml) | `vela-macos` | `Vela-0.2.0-macos-universal-unsigned.dmg` — universal (arm64 + x86_64) `velac` | Open, run `install.sh`, or copy by hand |
+| [`build.yml`](.github/workflows/build.yml) | `vela-debian` | `vela_0.2.0_<arch>.deb` — `velac` + runtime under `/usr/bin` and `/usr/lib/vela` | `sudo dpkg -i vela_0.2.0_amd64.deb` |
 
-None of them are signed, by design: the IPA needs the user's own developer
-certificate, and the DMG is meant to be installed without notarisation. On
-macOS, right-click the binary and choose **Open**, or clear the quarantine
-flag: `xattr -dr com.apple.quarantine /usr/local/bin/velac /usr/local/lib/vela`.
+**The IPA has its own workflow on purpose.** It is the priority artifact, so it
+does not share a run with tests or packages, it cancels an older run of itself,
+and it can be started alone: Actions → **ios** → *Run workflow*. macOS runners
+queued by GitHub are the usual reason an artifact is late — if the job sits in
+"Queued", that is capacity, not a build failure; check the job once it starts.
+
+None of the artifacts are signed, by design: the IPA needs the user's own
+developer certificate, and the DMG is meant to be installed without
+notarisation. On macOS, right-click the binary and choose **Open**, or clear the
+quarantine flag:
+`xattr -dr com.apple.quarantine /usr/local/bin/velac /usr/local/lib/vela`.
 
 ## Quick start
 

@@ -169,7 +169,7 @@ read in one sitting.
 ## The specification
 
 Everything above describes what the compiler does **today**. What the language is
-meant to become is written down in [`spec/`](spec/README.md): nineteen documents
+meant to become is written down in [`spec/`](spec/README.md): thirty-five documents
 covering a full programming language in four profiles.
 
 | Profile | Replaces | Status |
@@ -200,7 +200,20 @@ Highlights of the specification, so the scale is auditable rather than claimed:
 * **A systems profile** (doc 15) with `mmio` register blocks, `#[interrupt]`,
   `asm!`, `#[entry]`, page allocators, and no runtime at all — enough to write an
   operating system kernel.
-* **40 standard library modules** with over 1,100 items.
+* **40 core standard library modules** plus 18 specialised ones (graphics, media,
+  games, databases, i18n, plugins, embedded), with over 1,100 items.
+* **Specialised subsystems, specified in full**: typed SQL with compile-time
+  checked queries and migrations (doc 20), 2D/3D rendering with shaders written in
+  Vela (doc 21), image/audio/video pipelines (doc 22), HTTP/2 and QUIC with a
+  reliability policy (doc 23), a capability-based security model (doc 24), the
+  complete toolchain — formatter, linter, LSP, debugger, REPL (doc 25), a stable
+  binary ABI and plugin ABI (doc 26), a cost model with guaranteed optimisations
+  (doc 27), a self-hosting plan (doc 28), i18n with plural rules and RTL (doc 29),
+  a game runtime with deterministic simulation and netcode (doc 30), sandboxed
+  plugins (doc 31), and microcontrollers (doc 32).
+* **A style guide and a diagnostics catalogue** (docs 33–34), and a document that
+  lists every known gap, non-goal and open question (doc 35) — including what this
+  specification still does not answer.
 * **A migration map** (doc 19) from Swift, SwiftUI, JS/TS, Python, HTML, CSS, Rust,
   C, C++, Java/Kotlin and Go.
 

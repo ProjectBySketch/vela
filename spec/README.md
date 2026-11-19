@@ -159,6 +159,22 @@ Read in order for a full picture; each stands alone for reference.
 | 17 | [17-ffi.md](17-ffi.md) | C, Swift, Objective-C, JS, Python, WASM bridges | spec |
 | 18 | [18-grammar.md](18-grammar.md) | Complete EBNF for the entire language | spec |
 | 19 | [19-migration.md](19-migration.md) | Construct-by-construct maps from the languages Vela replaces | spec |
+| 20 | [20-databases.md](20-databases.md) | Typed SQL, schema declarations, migrations, repositories, cursors | spec |
+| 21 | [21-graphics.md](21-graphics.md) | 2D/3D scenes, materials, shaders in Vela, compute, render graphs | spec |
+| 22 | [22-media.md](22-media.md) | Image, audio graph, video, streaming pipelines, capture | spec |
+| 23 | [23-networking.md](23-networking.md) | HTTP/2, QUIC, DNS, gRPC, MQTT, reliability policy, proxies | spec |
+| 24 | [24-security.md](24-security.md) | Permissions, secrets, untrusted input, crypto policy, sandboxing | spec |
+| 25 | [25-tooling.md](25-tooling.md) | `vela` CLI, formatter, linter, LSP, debugger, docs, CI, REPL | spec |
+| 26 | [26-abi.md](26-abi.md) | Layout, mangling, calling conventions, plugin ABI, reproducibility | spec |
+| 27 | [27-performance.md](27-performance.md) | Cost model, guaranteed optimisations, budgets, benchmarks | spec |
+| 28 | [28-compiler.md](28-compiler.md) | Pipeline, error recovery, incrementality, self-hosting plan | spec |
+| 29 | [29-i18n.md](29-i18n.md) | Message catalogues, plurals, locales, RTL, translation workflow | spec |
+| 30 | [30-games.md](30-games.md) | Game loop, ECS, input, physics, determinism, netcode, saves | spec |
+| 31 | [31-plugins.md](31-plugins.md) | Native and WASM plugins, host API, sandboxing, versioning | spec |
+| 32 | [32-embedded.md](32-embedded.md) | Microcontrollers, HAL traits, static scheduling, no-allocator budgets | spec |
+| 33 | [33-diagnostics.md](33-diagnostics.md) | Diagnostic anatomy, code families, severity policy, baselines | spec |
+| 34 | [34-style.md](34-style.md) | Naming, formatting, lints, idioms, API and review checklists | spec |
+| 35 | [35-limitations.md](35-limitations.md) | The implementation gap, unwritten areas, non-goals, risks, open questions | living |
 
 Illustrative programs that exercise the spec live in
 [examples/](examples/README.md). They are **not** built by CI, because they use
@@ -217,14 +233,17 @@ claimed:
 
 | Dimension | 0.1 (implemented) | 1.0 (this spec) |
 | --- | --- | --- |
+| Documents | 0 | 35 |
 | Keywords | 14 | 60 reserved + 18 contextual |
 | Value types | 6 | 24 primitive and composite |
 | Operators | 17 | 48 |
 | Statement forms | 8 | 19 |
 | Declaration forms | 3 | 18 |
-| Stdlib modules | 0 | 40 |
+| Stdlib modules | 0 | 58 |
 | Standard library items | 15 builtins | 1,100+ |
 | Style properties (replacing CSS) | 0 | 214 |
 | Attributes | 0 | 59 |
-| Specified diagnostics classes | 0 | 60+ |
+| Specified diagnostic codes | 0 | 300+ |
+| Profiles | 1 (implicit) | 4 |
+
 

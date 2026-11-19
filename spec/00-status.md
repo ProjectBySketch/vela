@@ -359,6 +359,183 @@ This is the replacement for SwiftUI, UIKit, HTML and CSS.
 | Header generation from Vela | `planned` |
 | Binding generation from C headers | `planned` |
 
+### 2.18 Databases — doc 20
+
+| Feature | Status |
+| --- | --- |
+| `db.open`, connection pool, `Send + Share` pool | `spec` |
+| `#[query]` with compile-time schema checking | `spec` |
+| Schema declaration DSL and dialect type mapping | `spec` |
+| Migrations with checksums, dry run, dangerous-change guard | `spec` |
+| Transactions, savepoints, isolation levels | `spec` |
+| Typed repositories and checked predicates | `spec` |
+| Keyset pagination cursors | `spec` |
+| Full-text, JSON, vector search | `spec` (vector index `planned`) |
+| Multi-tenancy and sharding | `spec` |
+| Query observability and redaction | `spec` |
+| Test dialects, rollback-per-test | `spec` |
+
+### 2.19 Graphics — doc 21
+
+| Feature | Status |
+| --- | --- |
+| Retained 2D scene, transforms, z-order, batching | `spec` |
+| Hit testing and picking | `spec` |
+| 3D scene, cameras, meshes, materials, lights, instancing | `spec` |
+| `shader` declarations compiled to MSL/WGSL/SPIR-V/GLSL | `spec` |
+| Compute shaders and dispatch | `spec` (software fallback `planned`) |
+| Render graph with pass dependencies | `spec` |
+| Headless rendering with deterministic seed | `spec` |
+| Golden-image testing | `spec` |
+| Charts as a first-class module | `spec` |
+| Colour management, HDR, tonemapping | `spec` |
+| glTF/USD import | glTF `spec`, USD `planned` |
+| GPU shaders authored in Vela running on a device | `planned` |
+
+### 2.20 Media — doc 22
+
+| Feature | Status |
+| --- | --- |
+| Image decode/encode, resize, filters, colour spaces | `spec` |
+| Animated images | `spec` |
+| Audio graph: sources, effects, mixer, spatial | `spec` |
+| Offline audio rendering for tests | `spec` |
+| MIDI input and instrument nodes | `spec` |
+| Video decode, seek, encode, thumbnail | `spec` |
+| Streaming pipelines with backpressure | `spec` |
+| Capture: camera, microphone, screen | `spec` |
+| Subtitles | `spec` |
+
+### 2.21 Networking — doc 23
+
+| Feature | Status |
+| --- | --- |
+| TCP/UDP with timeouts on every call | `spec` |
+| Happy-eyeballs connect, address policy, SSRF rules | `spec` |
+| HTTP/1.1 and HTTP/2 client with pooling | `spec` |
+| HTTP/3 over QUIC, datagrams | `spec` |
+| WebSocket, SSE, gRPC, MQTT | `spec` (gRPC messages `planned`) |
+| DNS with DoT/DoH and cache caps | `spec` |
+| Retry, breaker, rate limit, deadline budget | `spec` |
+| Server timeouts, graceful shutdown, health endpoints | `spec` |
+| Proxies and forwarded-header trust | `spec` |
+| `net.fake` test server | `spec` |
+
+### 2.22 Security — doc 24
+
+| Feature | Status |
+| --- | --- |
+| Permission declarations in `vela.pkg` | `spec` |
+| Enforcement on Apple/Linux/web | `spec` (platform mappings partly `planned`) |
+| `Secret<T>` with redaction | `spec` |
+| Safe constructors for untrusted input | `spec` |
+| Cryptographic policy checked at build time | `spec` |
+| Supply chain: lock hashes, `--frozen`, reproducibility | `spec` |
+| `vela audit`, SBOM, package signing | `planned` |
+| Sandbox profiles and seccomp/landlock generation | `planned` |
+| `unsafe` audit table | `spec` |
+
+### 2.23 Tooling — doc 25
+
+| Feature | Status |
+| --- | --- |
+| `vela` CLI with build/run/test/fmt/lint/doc/add | `spec` |
+| Canonical formatter with ten rules | `spec` |
+| Lint groups with per-package configuration | `spec` |
+| Language server (LSP) and debug adapter (DAP) | `spec` |
+| Debug info and Vela-level stack traces | `spec` |
+| REPL compiling each entry | `spec` |
+| Documentation generator with doc tests | `spec` |
+| Machine-readable `--json` for every command | `spec` |
+| Official editor extensions | `planned` (except VS Code) |
+
+### 2.24 ABI and binary interface — doc 26
+
+| Feature | Status |
+| --- | --- |
+| `#[repr(Vela)]`, `#[repr(C)]`, packed, align, transparent | `spec` |
+| Enum layout, `Option` niche optimisation | `spec` |
+| Shared-value header layout | `spec` (stable within an edition) |
+| Symbol mangling scheme | `spec` |
+| Stable plugin ABI with version negotiation | `spec` |
+| `#[derive(Binary)]`, `#[stable]` | `planned` |
+| Reproducible builds and `--verify-repro` | `spec` |
+
+### 2.25 Performance — doc 27
+
+| Feature | Status |
+| --- | --- |
+| Cost model and ten guaranteed optimisations | `spec` |
+| Visible allocation rule | `spec` |
+| Benchmarks with statistics and regression gates | `spec` |
+| CPU/memory profilers and retain/release counters | `spec` |
+| Memory and latency budgets | `spec` |
+
+### 2.26 Compiler architecture — doc 28
+
+| Feature | Status |
+| --- | --- |
+| The pipeline described in §1 of that document | `spec` |
+| `velac` 0.1 as a subset of it | `impl` |
+| Self-hosting stages 1–5 with byte-identical gates | `planned` |
+| Conformance suite | `planned` |
+
+### 2.27 Internationalisation — doc 29
+
+| Feature | Status |
+| --- | --- |
+| `messages` catalogues with typed interpolation | `spec` |
+| Locale plural rules checked at build time | `spec` |
+| Locale-aware number/currency/date/list/unit formatting | `spec` |
+| RTL logical layout and bidi isolation | `spec` |
+| Translation extraction/import and CI checks | `spec` |
+| Pseudolocale rendering | `spec` |
+
+### 2.28 Games — doc 30
+
+| Feature | Status |
+| --- | --- |
+| Fixed-step loop with bounded catch-up | `spec` |
+| ECS with typed queries and deferred structural changes | `spec` |
+| Action-based input model | `spec` |
+| Kinematic collision and raycasts | `spec` |
+| Rigid-body physics and constraints | `spec` |
+| Deterministic simulation, replays, state hashing | `spec` |
+| Netcode: lockstep, rollback, server authority | `spec` (rollback `planned` in detail) |
+| Save games with versioning | `spec` |
+
+### 2.29 Plugins — doc 31
+
+| Feature | Status |
+| --- | --- |
+| Native and WASM plugins with one declaration | `spec` |
+| Host API (log, clock, random, fs, http, kv) | `spec` |
+| Sandbox limits: memory, fuel, wall time | `spec` |
+| Capability ceiling and hash verification | `spec` |
+| Hot reload and per-plugin isolation | `spec` |
+| Plugin marketplace | `planned` |
+
+### 2.30 Embedded — doc 32
+
+| Feature | Status |
+| --- | --- |
+| Cortex-M and RISC-V targets | `spec` (Xtensa/AVR `planned`) |
+| HAL traits for GPIO/SPI/I2C/UART/ADC/Storage | `spec` |
+| Static-priority task scheduler with deadline analysis | `spec` |
+| No-allocator subset with `fmt.writeTo` | `spec` |
+| Static memory budget reporting | `spec` |
+| `vela flash`, `probe-rs` | `planned` |
+
+### 2.31 Diagnostics and style — docs 33, 34
+
+| Feature | Status |
+| --- | --- |
+| Diagnostic anatomy, code families, severity policy | `spec` |
+| `vela explain`, `--json` catalogue, baselines | `spec` |
+| Naming, formatting, lints, idioms | `impl` (formatter), `spec` (lints) |
+| API and review checklists | `spec` |
+
+
 ---
 
 ## 3. The gap, in one paragraph
@@ -368,8 +545,10 @@ the subset in §1: 14 keywords, 6 value types, 15 builtins, no types, no
 closures, no structs, no modules, no borrow or ownership checking, no memory
 management, no UI and no web. This specification describes a language roughly
 one hundred times that size in surface area: 60 reserved keywords, 24 types, 48
-operators, 40 standard library modules, 18 declaration forms, 214 style
-properties and four profiles. The distance between the two is the roadmap, and
+operators, 58 standard library modules, 18 declaration forms, 214 style
+properties and four profiles. And doc 35 states, in one place, everything this
+specification still does not answer — 23 unwritten areas, 18 deliberate
+non-goals, and 10 open questions. The distance between the two is the roadmap, and
 it is large on purpose — a language that can build an operating system and a
 styled website cannot be a weekend project, and pretending otherwise would be
 the only dishonest thing in this repository.

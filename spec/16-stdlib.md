@@ -2,7 +2,8 @@
 
 **Status:** `spec`. `velac` 0.1 ships 15 builtins and no modules.
 
-40 modules. The prelude (`core`) is imported everywhere; every other module needs
+40 modules here, plus 18 specialised ones specified in their own documents. The
+prelude (`core`) is imported everywhere; every other module needs
 a `use`. Items are shown by signature; `…` means "and the obvious siblings".
 
 Availability per profile:
@@ -17,6 +18,23 @@ Availability per profile:
 
 Using a module the profile does not have is `E-MOD-060` with the list of
 profiles that do.
+
+### 1.1 Modules specified elsewhere
+
+| Module | Document | Purpose |
+| --- | --- | --- |
+| `gfx`, `paint`, `chart` | [21-graphics.md](21-graphics.md) | scenes, shaders, compute, charts |
+| `image`, `audio`, `video`, `media`, `camera` | [22-media.md](22-media.md) | decode, audio graph, pipelines, capture |
+| `http2`, `quic`, `dns`, `grpc`, `mqtt`, `sse` | [23-networking.md](23-networking.md) | protocol layers |
+| `secrets` | [24-security.md](24-security.md) | platform key store |
+| `db` | [20-databases.md](20-databases.md) | schema, migrations, repositories |
+| `i18n` | [29-i18n.md](29-i18n.md) | catalogues, locales, plural rules |
+| `game`, `physics`, `save` | [30-games.md](30-games.md) | ECS, simulation, netcode |
+| `plugins` | [31-plugins.md](31-plugins.md) | host side of the plugin ABI |
+| `embedded`, `hal` | [32-embedded.md](32-embedded.md) | microcontrollers |
+
+`db` appears in both lists: its query surface is part of this document, its
+schema and migration surface is doc 20.
 
 ---
 

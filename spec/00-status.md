@@ -595,6 +595,80 @@ This is the replacement for SwiftUI, UIKit, HTML and CSS.
 | Local development parity (`vela dev`) | `spec` |
 | Multi-region guidance | `spec` |
 
+### 2.36 Build system — doc 40
+
+| Feature | Status |
+| --- | --- |
+| Target matrix generated for CI | `spec` |
+| Workspaces with unified features and `workspace.deps` | `spec` |
+| `build.vela` build scripts, hermetic and cached | `spec` |
+| Declared generators with input/output tracking | `spec` |
+| Interface-hash incrementality and `--explain` | `spec` |
+| Local and remote cache with verified entries | `spec` |
+| Reproducible builds with `--verify-repro` | `spec` |
+| Cross-compilation toolchains in the manifest | `spec` |
+| Artifact kinds: bin, lib, c, app, ipa, dmg, deb, oci, sbom | `spec` |
+
+### 2.37 Testing — doc 41
+
+| Feature | Status |
+| --- | --- |
+| Unit, integration and doc tests | `spec` |
+| Property-based tests with shrinking and seeds | `spec` |
+| Coverage-guided fuzzing with a saved corpus | `spec` |
+| Inline and file snapshots, golden images | `spec` |
+| Load tests with p50/p95/p99 budgets | `spec` |
+| Mutation testing with a score floor | `spec` |
+| Coverage mapped to Vela source | `spec` |
+| Isolation rules and fixtures | `spec` |
+
+### 2.38 Contracts and refinements — doc 42
+
+| Feature | Status |
+| --- | --- |
+| `requires` / `ensures` / `old()` on functions | `spec` |
+| Refinement types (`Int in 0..=100`, `where` predicates) | `spec` |
+| Struct and enum invariants | `spec` |
+| Trait contracts checked against implementations | `spec` |
+| Loop invariants | `spec` |
+| Contracts on FFI and `unsafe` boundaries | `spec` |
+| Static proving via an SMT backend | `planned` |
+
+### 2.39 Streams, signals and sync — doc 43
+
+| Feature | Status |
+| --- | --- |
+| `gen fn`, `yield`, `yield*` | `spec` |
+| `Stream<T>` with `await for` | `spec` |
+| Shared operators for iterators and streams | `spec` |
+| Backpressure via bounded buffers | `spec` |
+| `signal`, `computed`, `effect`, `batch` | `spec` |
+| CRDTs (counter, set, map, text, list) | `spec` |
+| Local-first sync with offline queue | `spec` |
+
+### 2.40 Units and money — doc 44
+
+| Feature | Status |
+| --- | --- |
+| `#[unit]` declarations and suffix literals | `spec` |
+| Dimensional arithmetic and checked comparisons | `spec` |
+| Affine units (temperature points vs deltas) | `spec` |
+| `Money` with currency checking and explicit rounding | `spec` |
+| `Instant`/`Duration` algebra | `spec` |
+| Data sizes, rates and SI derived units | `spec` |
+| Physical constants with uncertainty | `spec` |
+
+### 2.41 Development loop — doc 45
+
+| Feature | Status |
+| --- | --- |
+| `vela dev` with incremental rebuild and reload | `spec` |
+| Hot reload with per-change classification | `spec` |
+| State preservation rules and opt-outs | `spec` |
+| Recording, deterministic replay and time travel | `spec` |
+| Live inspector and dev overlay | `spec` |
+| Remote and device debugging over DAP | `spec` |
+
 ---
 
 ## 3. The gap, in one paragraph

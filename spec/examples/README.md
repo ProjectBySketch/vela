@@ -14,6 +14,7 @@ Each file header says which tier it needs:
 | `os/kernel.vela` | `sys` | D | boot, UART driver, interrupts, page allocator, scheduler |
 | `os/fs.vela` | `sys` | D | a `FileSystem` trait, a block driver, a syscall with `UserPtr` |
 | `ai/train.vela` | `core` | A | tensors, autodiff, training, inference, serving |
+| `showcase.vela` | `core` | A | contracts, refinements, units, money, streams, signals |
 
 They are here so that a reader can check the prose against real code, and so that
 the first implementation of the compiler has targets to aim at. When `velac`

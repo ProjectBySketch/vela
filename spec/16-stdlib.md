@@ -35,6 +35,8 @@ profiles that do.
 | `tensor`, `nn`, `train`, `infer`, `tokenize`, `embed`, `serve` | [36-ai.md](36-ai.md) | machine learning |
 | `cbor`, `msgpack`, `proto`, `toml`, `yaml`, `csv`, `parquet`, `data` | [38-serialization.md](38-serialization.md) | formats and dataframes |
 | `observability`, `deploy`, `config` | [39-cloud.md](39-cloud.md) | telemetry, deployment, typed configuration |
+| `units` | [44-units.md](44-units.md) | units of measure, money, dimensioned quantities |
+| `signal`, `crdt`, `sync` | [43-streams.md](43-streams.md) | reactive values and local-first sync |
 
 `db` appears in both lists: its query surface is part of this document, its
 schema and migration surface is doc 20.

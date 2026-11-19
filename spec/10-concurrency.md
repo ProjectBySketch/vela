@@ -370,7 +370,18 @@ The two consequences a program can rely on:
 
 ---
 
-## 15. Diagnostics
+## 16. Beyond tasks: streams and signals
+
+A `Task<T>` is one value. A sequence of values over time is a `Stream<T>`, and a
+value that changes over time is a `signal` — both specified in
+[43-streams.md](43-streams.md), both built on the task model in this document
+(`await for` is `await` in a loop, and a signal is a value plus a subscription
+list). Use a `Channel<T>` between tasks, a `Stream<T>` for I/O, and a `signal`
+inside a UI; using the wrong one is the subject of that document's §7.
+
+---
+
+## 17. Diagnostics
 
 | Code | Meaning |
 | --- | --- |

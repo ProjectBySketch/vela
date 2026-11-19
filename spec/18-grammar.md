@@ -72,11 +72,12 @@ attrArg       = literal
 ### 3.1 Functions
 
 ```ebnf
-fnDecl        = [ "async" ] , "fn" , ident , [ typeParams ] ,
+fnDecl        = [ "async" | "gen" ] , "fn" , ident , [ typeParams ] ,
                 "(" , [ params ] , ")" ,
                 [ "->" , type ] ,
                 [ effectList ] ,
                 [ "where" , whereClause ] ,
+                [ contractList ] ,
                 block ;
 
 params        = param , { "," , param } , [ "," ] ;
@@ -90,7 +91,13 @@ effectList    = ident , { ident } ;          (* io, unsafe, ui *)
 whereClause   = whereItem , { "," , whereItem } ;
 whereItem     = type , ":" , bounds
               | type , "::" , ident , ":" , bounds ;
+
+contractList  = contract , { contract } ;
+contract      = ( "requires" | "ensures" | "decreases" ) , expr ;   (* doc 42 *)
 ```
+
+`gen fn` (doc 43) returns `Iterator<T>`; `yield` is legal only inside it.
+`requires`, `ensures`, `asserts` and `old(...)` are specified in doc 42.
 
 ### 3.2 Types with fields
 
@@ -147,7 +154,8 @@ useTree       = usePath
 usePath       = ( "self" | "super" | "crate" | ident )
                 , { "::" , ident } , [ "as" , ident ] ;
 
-typeDecl      = [ "opaque" ] , "type" , ident , [ typeParams ] , "=" , type ;
+typeDecl      = [ "opaque" ] , "type" , ident , [ typeParams ] , "=" , type
+              , [ ( "in" , expr ) | ( "where" , expr ) ] ;   (* refinement, doc 42 *)
 constDecl     = "const" , ident , [ ":" , type ] , "=" , expr ;
 staticDecl    = "static" , [ "mut" ] , ident , [ ":" , type ] , "=" , expr ;
 ```
@@ -265,6 +273,7 @@ statement     = item                           (* a nested declaration *)
               | continueStmt
               | failStmt
               | assertStmt
+              | yieldStmt
               | assignment
               | exprStmt ;
 
@@ -278,10 +287,12 @@ ifStmt        = "if" , expr , block , { "else" , "if" , expr , block } ,
 ifLetStmt     = "if" , ( "let" , pattern , "=" , expr | expr ) ,
                 { "," , expr } , block , [ "else" , block ] ;
 
-whileStmt     = "while" , [ "let" , pattern , "=" ] , expr , block ;
+whileStmt     = "while" , [ "let" , pattern , "=" ] , expr ,
+                { "asserts" , expr } , block ;
 loopStmt      = "loop" , block ;
 forStmt       = "for" , pattern , "in" , expr , [ "if" , expr ] , block ;
-labelledLoop  = ident , ":" , ( forStmt | whileStmt | loopStmt ) ;
+awaitForStmt  = "await" , "for" , pattern , "in" , expr , block ;
+labelledLoop  = ident , ":" , ( forStmt | whileStmt | loopStmt | awaitForStmt ) ;
 
 matchStmt     = "match" , expr , "{" , { matchArm } , "}" ;
 matchArm      = pattern , [ "if" , expr ] , "=>" , ( block | expr ) , [ "," ] ;
@@ -297,6 +308,7 @@ continueStmt  = "continue" , [ ident ] ;
 failStmt      = "fail" , expr ;
 assertStmt    = ( "assert" | "assertEq" | "assertNe" | "panic" | "unreachable" )
                 , [ "(" , [ argList ] , ")" ] ;
+yieldStmt     = "yield" , ( expr | "*" , expr ) ;     (* only in `gen fn` *)
 
 assignment    = postfixExpr , assignOp , expr ;
 assignOp      = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "<<=" | ">>="

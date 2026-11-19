@@ -49,7 +49,7 @@ Rules:
 | Prefix | Area | Defined in |
 | --- | --- | --- |
 | `E-LEX-` | source text and tokens | [01-lexical.md](01-lexical.md) §13 |
-| `E-TYPE-` | type checking | [02-types.md](02-types.md) §14 |
+| `E-TYPE-` | type checking | [02-types.md](02-types.md) §16 |
 | `E-EXPR-` | expressions | [03-expressions.md](03-expressions.md) §11 |
 | `E-STMT-` | statements and scope | [04-statements.md](04-statements.md) §16 |
 | `E-FN-` | functions and effects | [05-functions.md](05-functions.md) §14 |
@@ -57,7 +57,7 @@ Rules:
 | `E-GEN-` | generics and coherence | [07-generics.md](07-generics.md) §12 |
 | `E-MOD-` / `E-PKG-` | modules, packages, registry | [08-modules.md](08-modules.md) §12 |
 | `E-MEM-` | memory, moves, `unsafe` | [09-memory.md](09-memory.md) §12 |
-| `E-CONC-` | concurrency | [10-concurrency.md](10-concurrency.md) §14 |
+| `E-CONC-` | concurrency | [10-concurrency.md](10-concurrency.md) §17 |
 | `E-ERR-` | `Result`, `Option`, panics | [11-errors.md](11-errors.md) §13 |
 | `E-META-` | `comptime`, macros, attributes | [12-metaprogramming.md](12-metaprogramming.md) §10 |
 | `E-UI-` | views, styles, accessibility | [13-ui.md](13-ui.md) §22 |
@@ -78,6 +78,12 @@ Rules:
 | `E-GAME-` | entities, determinism, saves | [30-games.md](30-games.md) §11 |
 | `E-PLUG-` | plugin loading and ABI | [31-plugins.md](31-plugins.md) §9 |
 | `E-EMB-` | microcontrollers | [32-embedded.md](32-embedded.md) §11 |
+| `E-BUILD-` | the build system | [40-build.md](40-build.md) §12 |
+| `E-TEST-` | the test runner | [41-testing.md](41-testing.md) §13 |
+| `E-CONTRACT-` | contracts and refinements | [42-contracts.md](42-contracts.md) §11 |
+| `E-STREAM-` | generators, streams, signals | [43-streams.md](43-streams.md) §9 |
+| `E-UNIT-` | units, quantities, money | [44-units.md](44-units.md) §9 |
+| `E-DEV-` | hot reload and the dev loop | [45-dev-loop.md](45-dev-loop.md) §10 |
 | `E-RUN-` | run-time failures | spread across docs, listed below |
 
 Warnings use `W-` with the same area suffix, so `W-UI-040` and `E-UI-040` are

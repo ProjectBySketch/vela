@@ -1,0 +1,109 @@
+# spec example — showcase. Not compiled by CI.
+#
+# One program that exercises contracts, refinement types, units, streams,
+# signals and the AI boundary together. It is a delivery-cost calculator:
+# it must be correct about money, units and time or it is not correct at all.
+
+use std::{money, units, time}
+
+# ---------------------------------------------------------------- refined domain
+
+type Ratio     = Float in 0.0..=1.0
+type Latitude  = Float in -90.0..=90.0
+type Longitude = Float in -180.0..=180.0
+
+#[invariant]
+struct Route {
+  from: Coordinate
+  to: Coordinate
+  distance: Quantity<Float, units.Kilometer>
+}
+
+impl Route {
+  invariant self.distance > 0.0.km
+
+  fn new(from: Coordinate, to: Coordinate) -> Result<Route, RouteError> {
+    let km = geo.distance(from, to)                 # Quantity<Float, Kilometer>
+    if km <= 0.0.km { fail RouteError.zeroLength }
+    Ok(Route { from, to, distance: km })
+  }
+}
+
+struct Coordinate {
+  lat: Latitude
+  lon: Longitude
+}
+
+# ---------------------------------------------------------------- pricing with contracts
+
+fn deliveryCost(
+  route: Route,
+  weight: Quantity<Float, units.Kilogram>,
+  speed: Quantity<Float, units.Kilometer / units.Hour>,
+  fuel: Money,
+) -> Result<Money, PricingError>
+  requires weight > 0.0.kg
+  requires speed > 0.0.km / 1.0.h
+  ensures result.isOk implies result.unwrap() >= 0.money(fuel.currency)
+{
+  let hours = route.distance / speed
+  let base = 5.00.money(fuel.currency)
+  let perKm = 0.42.money(fuel.currency)
+  let perKg = 0.08.money(fuel.currency)
+
+  let cost = base
+    + perKm * route.distance.value
+    + perKg * weight.value
+    + fuel * hours.value
+
+  Ok(cost.roundTo(.cent, mode: .halfEven))
+}
+
+# ---------------------------------------------------------------- a stream of deliveries
+
+gen fn deliveries(day: Date) -> Delivery {
+  for row in try db.query(DAY_QUERY, day)? {
+    yield try Delivery.fromRow(row)?
+  }
+}
+
+async fn settle(day: Date) -> Result<Money, Error> {
+  let currency = .usd
+  mut total = 0.00.money(currency)
+  mut failed = 0
+
+  await for delivery in deliveries(day) {
+    let cost = try deliveryCost(
+      delivery.route,
+      weight: delivery.weight,
+      speed: delivery.speed,
+      fuel: delivery.fuel,
+    ) catch e {
+      failed += 1
+      log.warn("delivery ${delivery.id}: ${e}")
+      continue
+    }
+    total += cost
+    metrics.histogram("delivery.cost", cost.value)
+  }
+
+  guard failed == 0 else { fail Error("${failed} deliveries unpriced") }
+  Ok(total)
+}
+
+# ---------------------------------------------------------------- test
+
+#[property]
+fn costIsNeverNegative(d: Delivery) {
+  let cost = deliveryCost(d.route, d.weight, d.speed, d.fuel) catch { return }
+  assert(cost.unwrap() >= 0.money(cost.unwrap().currency))
+}
+
+#[property]
+fn fasterIsCheaper(speed: Quantity<Float, units.Kilometer / units.Hour>) {
+  assume(speed > 1.0.km / 1.0.h)
+  let slower = speed * 2.0
+  let fast = deliveryCost(fixtures.route(), 1.0.kg, speed, 2.00.money(.usd))
+  let slow = deliveryCost(fixtures.route(), 1.0.kg, slower, 2.00.money(.usd))
+  assert(fast.unwrap() <= slow.unwrap())
+}

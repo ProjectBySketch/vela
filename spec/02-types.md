@@ -407,7 +407,33 @@ There is no structural subtyping, no `Duck` typing, and no implicit conformance.
 
 ---
 
-## 14. Diagnostics
+## 15. Refinement types
+
+A type may be narrowed by a predicate, and the narrowing is part of the type:
+
+```vela
+type Percentage = Int in 0..=100
+type NonEmpty<T> = List<T> where len > 0
+type Email = Str where contains("@")
+```
+
+`x: Percentage` carries the proof that it is in range; constructing one from an
+unchecked value is a checked conversion, and a definitely-wrong literal is a
+compile error. The full rules — where a check is static, where it is a runtime
+check, how it interacts with contracts and `struct` invariants — are in
+[42-contracts.md](42-contracts.md) §2. The grammar for the declaration is in
+[18-grammar.md](18-grammar.md) §3.4.
+
+Two consequences that touch this document:
+
+* a refinement over a collection narrows what its methods can assume
+  (`NonEmpty<T>` indexes without a bounds check);
+* a refined type is a distinct type for overloads and for `impl` (you may
+  implement a method on `NonEmpty<T>` alone).
+
+---
+
+## 16. Diagnostics
 
 | Code | Meaning |
 | --- | --- |

@@ -169,7 +169,7 @@ read in one sitting.
 ## The specification
 
 Everything above describes what the compiler does **today**. What the language is
-meant to become is written down in [`spec/`](spec/README.md): thirty-nine documents
+meant to become is written down in [`spec/`](spec/README.md): forty-five documents
 covering a full programming language in four profiles.
 
 | Profile | Replaces | Status |
@@ -218,6 +218,26 @@ Highlights of the specification, so the scale is auditable rather than claimed:
 * **Deployment and operations** (doc 39): typed configuration, container/OCI and
   static deploy adapters, canaries with automatic rollback, OpenTelemetry traces,
   metrics and logs, health checks and graceful shutdown.
+* **A build system, not a build script** (doc 40): CI matrices generated from the
+  manifest, workspaces, hermetic `build.vela` scripts, verified local/remote caching,
+  reproducible releases, and artifacts from a binary to an `.ipa`, `.deb` or
+  container image.
+* **Testing as a first-class citizen** (doc 41): unit, doc and integration tests,
+  property tests with shrinking, coverage-guided fuzzing, snapshots and golden
+  images, load tests with p99 budgets, and mutation testing that measures whether
+  the tests would catch a bug.
+* **Design by contract** (doc 42): `requires` / `ensures` / `old()` on functions,
+  struct invariants, trait contracts, loop invariants, and refinement types
+  (`Int in 0..=100`, `NonEmpty<T>`) that remove bounds checks by proving them.
+* **Streams, signals and local-first sync** (doc 43): generators, `Stream<T>` with
+  `await for`, one operator set for both, reactive signals for UI, and CRDTs with
+  an offline queue for two devices editing the same document.
+* **Units of measure** (doc 44): `5.m / 9.58.s` is a velocity, `Meter + Second` is
+  a compile error, temperatures distinguish points from deltas, `Money` is integer
+  cents with a currency, and `Instant + Instant` does not type-check.
+* **A development loop with time travel** (doc 45): `vela dev` with per-change hot
+  reload and state preservation, deterministic record/replay, reverse execution,
+  a live inspector, and remote debugging over DAP.
 * **Specialised subsystems, specified in full**: typed SQL with compile-time
   checked queries and migrations (doc 20), 2D/3D rendering with shaders written in
   Vela (doc 21), image/audio/video pipelines (doc 22), HTTP/2 and QUIC with a

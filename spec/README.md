@@ -179,6 +179,12 @@ Read in order for a full picture; each stands alone for reference.
 | 37 | [37-kernel.md](37-kernel.md) | Processes, virtual memory, VFS, drivers, IPC, syscalls, POSIX layer | spec |
 | 38 | [38-serialization.md](38-serialization.md) | Nine formats, derives, schema evolution, validation, dataframes | spec |
 | 39 | [39-cloud.md](39-cloud.md) | Deploy adapters, config, observability, scaling, rollback | spec |
+| 40 | [40-build.md](40-build.md) | Workspaces, build scripts, hermetic builds, caching, cross-compilation | spec |
+| 41 | [41-testing.md](41-testing.md) | Properties, fuzzing, snapshots, load, mutation, coverage | spec |
+| 42 | [42-contracts.md](42-contracts.md) | `requires`/`ensures`, invariants, refinement types, proving | spec |
+| 43 | [43-streams.md](43-streams.md) | Generators, async streams, signals, CRDTs, local-first sync | spec |
+| 44 | [44-units.md](44-units.md) | Units of measure, dimensioned quantities, money, time | spec |
+| 45 | [45-dev-loop.md](45-dev-loop.md) | Hot reload, time travel, replay, live inspection, remote debug | spec |
 
 Illustrative programs that exercise the spec live in
 [examples/](examples/README.md). They are **not** built by CI, because they use
@@ -192,6 +198,7 @@ features `velac` does not implement yet:
 | [examples/kernel.vela](examples/kernel.vela) | `sys` | boot, MMIO, interrupts, heap |
 | [examples/os/fs.vela](examples/os/fs.vela) | `sys` | a filesystem trait, a block driver, a syscall |
 | [examples/ai/train.vela](examples/ai/train.vela) | `core` | tensors, autodiff, training, inference, serving |
+| [examples/showcase.vela](examples/showcase.vela) | `core` | contracts, refinements, units, money, streams |
 
 ---
 
@@ -239,13 +246,13 @@ claimed:
 
 | Dimension | 0.1 (implemented) | 1.0 (this spec) |
 | --- | --- | --- |
-| Documents | 0 | 39 |
+| Documents | 0 | 45 |
 | Keywords | 14 | 60 reserved + 18 contextual |
 | Value types | 6 | 24 primitive and composite |
 | Operators | 17 | 48 |
 | Statement forms | 8 | 19 |
 | Declaration forms | 3 | 18 |
-| Stdlib modules | 0 | 70+ |
+| Stdlib modules | 0 | 75+ |
 | Standard library items | 15 builtins | 1,100+ |
 | Style properties (replacing CSS) | 0 | 214 |
 | Attributes | 0 | 59 |

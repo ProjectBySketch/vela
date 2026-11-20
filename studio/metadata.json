@@ -1,0 +1,5 @@
+{
+  "name": "Vela",
+  "description": "Vela programming language compiler, multi-target runtime, web UI builder, OS kernel emulator, 3D model studio, and AI workbench.",
+  "requestFramePermissions": []
+}

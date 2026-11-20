@@ -3,3 +3,5 @@ dist/
 *.o
 *.dSYM/
 .DS_Store
+node_modules/
+.env

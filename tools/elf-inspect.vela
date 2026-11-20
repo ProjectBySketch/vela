@@ -1,0 +1,60 @@
+// Inspect the identification and core header fields of an ELF file.
+// Usage: vela run tools/elf-inspect.vela -- path/to/program.elf
+
+use std::{env, fs}
+
+fn main() -> Result<Void, Error> {
+  let args = env.args()
+  if args.len() < 2 {
+    println("usage: vela run tools/elf-inspect.vela -- <file>")
+    return Err(error("missing ELF file path"))
+  }
+
+  let path = args.at(1)
+  let data = try fs.read(path)?
+
+  if data.len() < 20 {
+    return Err(error("file is too small to contain an ELF header"))
+  }
+
+  if data.at(0) != 0x7F || data.at(1) != 0x45 ||
+     data.at(2) != 0x4C || data.at(3) != 0x46 {
+    return Err(error("not an ELF file: invalid magic"))
+  }
+
+  let class = data.at(4)
+  let endian = data.at(5)
+  let identVersion = data.at(6)
+
+  if class != 1 && class != 2 {
+    return Err(error("unsupported ELF class"))
+  }
+  if endian != 1 && endian != 2 {
+    return Err(error("unsupported ELF byte order"))
+  }
+
+  let byteOrder = if endian == 1 { "little-endian" } else { "big-endian" }
+  let bitness = if class == 1 { "32-bit" } else { "64-bit" }
+
+  let fileType = data.readInt(16, 2, endian)
+  let machine = data.readInt(18, 2, endian)
+
+  println("ELF file: ${path}")
+  println("Class: ${bitness}")
+  println("Byte order: ${byteOrder}")
+  println("Identification version: ${identVersion}")
+  println("File type: ${fileType}")
+  println("Machine: ${machine}")
+
+  if fileType == 2 {
+    println("Kind: executable")
+  } else if fileType == 3 {
+    println("Kind: shared object")
+  } else if fileType == 1 {
+    println("Kind: relocatable object")
+  } else {
+    println("Kind: other")
+  }
+
+  Ok(unit)
+}

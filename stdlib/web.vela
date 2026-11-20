@@ -1,0 +1,15 @@
+# Vela Standard Library — Web & UI Builder (`web`)
+
+pub struct Route {
+  method: Str
+  path: Str
+  status: Int
+}
+
+pub fn registerRoute(method: Str, path: Str, handler: Str) {
+  http.route(method, path, handler)
+}
+
+pub fn inspectRoutes() -> List<Str> {
+  http.routes()
+}

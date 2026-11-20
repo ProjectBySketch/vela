@@ -1,0 +1,14 @@
+# Vela Standard Library — 3D Graphics & Game Physics (`gfx3d` & `game`)
+
+pub fn stepSimulation(bodies: List<Any>, dt: Float, steps: Int) -> List<Any> {
+  mut i = 0
+  while i < steps {
+    game.step(bodies, dt)
+    i += 1
+  }
+  bodies
+}
+
+pub fn activeSceneSummary() -> Str {
+  "Scene: \${gfx3d.sceneName()} (\${gfx3d.partCount()} parts)"
+}

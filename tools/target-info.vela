@@ -1,0 +1,11 @@
+// Print the Vela runtime's target and profile information.
+// Usage: vela run tools/target-info.vela
+
+use std::env
+
+fn main() {
+  println("Vela target information")
+  println("Platform: ${env.platform()}")
+  println("Architecture: ${env.arch()}")
+  println("Profile: ${env.profile()}")
+}

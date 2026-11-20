@@ -1,0 +1,17 @@
+# Vela Standard Library — Operating System & Kernel Builder (`os`)
+
+pub fn mountRamfsFile(path: Str, content: Str) {
+  os.ramfsWrite(path, content)
+}
+
+pub fn readRamfsFile(path: Str) -> Str? {
+  os.ramfsRead(path)
+}
+
+pub fn listRamfs() -> List<Str> {
+  os.ramfsLs()
+}
+
+pub fn bootSummary() -> Map<Str, Any> {
+  os.bootInfo()
+}

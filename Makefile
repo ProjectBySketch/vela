@@ -19,6 +19,17 @@ build/runtime:
 test: all
 	@bash tests/run.sh
 
+# The studio in studio/ is the TypeScript toolchain and workbench. It is not
+# needed to build velac, and it reads this repository's examples, tests, spec
+# and stdlib in place.
+studio:
+	cd studio && npm install --no-audit --no-fund
+	cd studio && npm run build
+
+studio-check:
+	cd studio && npm install --no-audit --no-fund
+	cd studio && npm run lint
+
 clean:
 	rm -rf build dist
 
@@ -28,4 +39,4 @@ install: all
 	install -d $(DESTDIR)$(PREFIX)/lib/vela/runtime
 	install -m 644 $(RUNTIME) $(DESTDIR)$(PREFIX)/lib/vela/runtime/
 
-.PHONY: all test clean install
+.PHONY: all test clean install studio studio-check

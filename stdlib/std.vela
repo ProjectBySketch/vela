@@ -1,0 +1,19 @@
+# Vela Standard Library — Core Utilities (`std`)
+
+pub fn clamp(x: Float, minVal: Float, maxVal: Float) -> Float {
+  if x < minVal { return minVal }
+  if x > maxVal { return maxVal }
+  x
+}
+
+pub fn lerp(a: Float, b: Float, t: Float) -> Float {
+  a + (b - a) * t
+}
+
+pub fn sum(xs: List<Float>) -> Float {
+  mut acc = 0.0
+  for x in xs {
+    acc += x
+  }
+  acc
+}

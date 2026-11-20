@@ -21,6 +21,7 @@ Every push to `main` runs three workflows:
 | [`ios.yml`](.github/workflows/ios.yml) | `vela-ios` | `Vela-0.2.0-ios-unsigned.ipa` — the Vela playground app, built for arm64 iOS 15+ | Sign it with Sideloadly / AltStore / TrollStore and install |
 | [`build.yml`](.github/workflows/build.yml) | `vela-macos` | `Vela-0.2.0-macos-universal-unsigned.dmg` — universal (arm64 + x86_64) `velac` | Open, run `install.sh`, or copy by hand |
 | [`build.yml`](.github/workflows/build.yml) | `vela-debian` | `vela_0.2.0_<arch>.deb` — `velac` + runtime under `/usr/bin` and `/usr/lib/vela` | `sudo dpkg -i vela_0.2.0_amd64.deb` |
+| [`studio.yml`](.github/workflows/studio.yml) | `vela-studio` | The React studio and TypeScript toolchain, built to `studio/dist` | `cd studio && npm install && npm run dev` |
 
 **The IPA has its own workflow on purpose.** It is the priority artifact, so it
 does not share a run with tests or packages, it cancels an older run of itself,
@@ -338,10 +339,70 @@ next implementation something to aim at.
   produce.
 * `docs/learn/` - the eight-chapter tutorial for the language as shipped.
 * `packaging/` - the three packaging scripts the workflow calls.
+* `studio/` - the TypeScript toolchain and browser workbench: a second front end
+  (lexer, parser, type checker, linter, formatter, REPL) with four backends,
+  including the systems/kernel one. See [`studio/README.md`](studio/README.md).
+* `stdlib/`, `tools/` - Vela library modules and Vela-native programs, written for
+  the `core` profile in `spec/` rather than for `velac`.
 
 Because every expression becomes a call into the runtime, the emitter stays
 simple and backends come cheaply: `vela_main()` is just a function, so the same
 generated C runs on a desktop (`main`) and inside an iOS app.
+
+## The studio and the `vela` toolchain
+
+[`studio/`](studio/README.md) is a second, independent implementation of the
+language in TypeScript, and the web workbench built on it. It is not needed to
+build `velac`, and the two do not cover the same surface: `velac` implements the
+subset taught in [`docs/learn/`](docs/learn/README.md), while the studio's
+toolchain tracks the much larger language in [`spec/`](spec/README.md) — structs,
+generics, traits, `match`, closures, `async`, contracts, `theme`/`style`/`view`
+and `mmio`.
+
+```sh
+cd studio
+npm install
+npm run dev            # the studio at http://localhost:3000
+npm run vela -- help    # the `vela` CLI
+```
+
+It reads `examples/`, `tests/cases/`, `spec/` and `stdlib/` from the repository
+root, so the studio always shows the same programs the C toolchain tests.
+`VELA_ROOT` points it somewhere else; `PORT` moves the server.
+
+```
+vela run <file.vela | dir>             run a program or a project
+vela check | lint <file.vela>          type check, then lint
+vela fmt [--write] <file.vela>         format to the canonical style
+vela emit-c <file.vela> [out.c]        portable C11 for the `core` profile
+vela emit-kernel <file.vela> [out.c]   freestanding x86_64 kernel C (`sys` profile)
+vela build-web <file.vela> [out.html]  standalone site: HTML + CSS + islands
+vela export-obj <file.vela> [out.obj]  a `scene3d` block as Wavefront OBJ
+vela new <template> <dir>              scaffold tour|website|kernel|model3d_sat|ai_db
+vela test                              run tests/cases against the interpreter
+vela repl                              interactive REPL
+vela zip [out.zip]                     archive the workspace
+```
+
+### The systems backend
+
+`vela emit-kernel` lowers a program to freestanding C for a bare-metal x86_64
+target with no libc, no allocator and no runtime:
+
+* an `mmio` block becomes a packed register struct and a macro that dereferences
+  it at its base address, with `uint8_t` padding so every register sits at its
+  declared offset and a `_Static_assert` on `offsetof` to prove it;
+* `#[interrupt]` functions get `__attribute__((interrupt))` and a PIC EOI;
+* `#[entry]`, `kmain` or `main` becomes the entry point, ending in `hlt`;
+* `const` becomes a `#define`, emitted before the functions that use it;
+* `print`/`println` become COM1 serial writes, with numbers through a generated
+  `ks_put_u64`, because there is no formatter to call;
+* `asm!` is preserved verbatim, and function bodies lower to C over `uint64_t`.
+
+Collection `for`-in loops and method calls have no lowering yet and say so in a
+comment rather than emitting wrong code. This is not a bootable image by itself:
+the boot stub, GDT/IDT and page tables are yours to write, as
+[`spec/37-kernel.md`](spec/37-kernel.md) sets out.
 
 ## Installing from the artifacts
 
@@ -375,7 +436,9 @@ What it does **not** have yet, all of it specified in [`spec/`](spec/README.md):
   program is one file with one global namespace;
 * no `Result` or `?` — errors are `assert`, `error()` and runtime panics;
 * no static type checking: the compiler checks names, arity and `mut`, not types;
-* no UI, web, async or systems backends;
+* no UI, web or async backends in `velac`. The studio's TypeScript toolchain has
+  a web backend and a freestanding kernel backend, but it is a separate
+  implementation and it emits C, not a bootable image;
 * error messages point at a line, not a column, and there is no debugger.
 
 Those are the next steps, in the order the specification already lays out: a type
